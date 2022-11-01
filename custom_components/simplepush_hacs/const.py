@@ -6,6 +6,7 @@ DOMAIN: Final = "simplepush_hacs"
 DEFAULT_NAME: Final = "Simplepush"
 DATA_HASS_CONFIG: Final = "simplepush_hass_config"
 
+ATTR_ATTACHMENTS: Final = "attachments"
 ATTR_ENCRYPTED: Final = "encrypted"
 ATTR_EVENT: Final = "event"
 
