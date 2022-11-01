@@ -1,4 +1,11 @@
 colorlog==6.7.0
 homeassistant==2022.2.0
+<<<<<<< Updated upstream
 pip>=8.0.3,<20.3
 ruff==0.0.255
+simplepush==2.1.1
+=======
+pip>=8.0.3,<23.1
+ruff==0.0.256
+simplepush==2.2.0
+>>>>>>> Stashed changes

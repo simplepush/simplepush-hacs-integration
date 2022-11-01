@@ -1,0 +1,18 @@
+{
+  "domain": "simplepush_hacs",
+  "name": "Simplepush",
+  "version": "1.0.0",
+  "documentation": "https://www.home-assistant.io/integrations/simplepush",
+  "requirements": ["simplepush==2.1.1"],
+  "codeowners": ["@tymm"],
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+<<<<<<< Updated upstream
+  "loggers": ["simplepush"]
+=======
+  "issue_tracker": "https://github.com/simplepush/simplepush_hacs_integration/issues",
+  "loggers": ["simplepush"],
+  "requirements": ["simplepush==2.2.0"],
+  "version": "1.0.0"
+>>>>>>> Stashed changes
+}
