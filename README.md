@@ -1,47 +1,114 @@
-# Notice
+# Simplepush
 
-The component and platforms in this repository are not meant to be used by a
-user, but as a "blueprint" that custom component developers can build
-upon, to make more awesome stuff.
+_Integration to integrate with [Simplepush][simplepush]._
 
-HAVE FUN! 😎
+Simplepush is a lightweight freemium app for iOS and Android.
+It is used to send notifications to your phone or a group of users.
 
-## Why?
+This integrations supports the following:
+- Actionable notifications which work without any form of remote access to Home Assistant
+- Multiple images, videos and GIFs can be attached to a single notification
+- Notifications can be end-to-end encrypted
 
-This is simple, by having custom_components look (README + structure) the same
-it is easier for developers to help each other and for users to start using them.
+## Installation
 
-If you are a developer and you want to add things to this "blueprint" that you think more
-developers will have use for, please open a PR to add it :)
+### HACS
 
-## What?
+1. [Install HACS](https://hacs.xyz/docs/setup/download).
+1. Once you have installed HACS, go to the Home Assistant web interface and click on the HACS icon in the sidebar.
+1. In the HACS interface, click on the "Integrations" tab, and then click on the "Explore & Add Repositories" button.
+1. Search for 'Simplepush', download the integration and restart Home Assistant
 
-This repository contains multiple files, here is a overview:
+### Manual
 
-File | Purpose | Documentation
--- | -- | --
-`.devcontainer.json` | Used for development/testing with Visual Studio Code. | [Documentation](https://code.visualstudio.com/docs/remote/containers)
-`.github/ISSUE_TEMPLATE/*.yml` | Templates for the issue tracker | [Documentation](https://help.github.com/en/github/building-a-strong-community/configuring-issue-templates-for-your-repository)
-`.vscode/tasks.json` | Tasks for the devcontainer. | [Documentation](https://code.visualstudio.com/docs/editor/tasks)
-`custom_components/integration_blueprint/*` | Integration files, this is where everything happens. | [Documentation](https://developers.home-assistant.io/docs/creating_component_index)
-`CONTRIBUTING.md` | Guidelines on how to contribute. | [Documentation](https://help.github.com/en/github/building-a-strong-community/setting-guidelines-for-repository-contributors)
-`LICENSE` | The license file for the project. | [Documentation](https://help.github.com/en/github/creating-cloning-and-archiving-repositories/licensing-a-repository)
-`README.md` | The file you are reading now, should contain info about the integration, installation and configuration instructions. | [Documentation](https://help.github.com/en/github/writing-on-github/basic-writing-and-formatting-syntax)
-`requirements.txt` | Python packages used for development/lint/testing this integration. | [Documentation](https://pip.pypa.io/en/stable/user_guide/#requirements-files)
+1. Using the tool of choice open the directory (folder) for your HA configuration (where you find `configuration.yaml`).
+1. If you do not have a `custom_components` directory (folder) there, you need to create it.
+1. In the `custom_components` directory (folder) create a new folder called `simplepush`.
+1. Download _all_ the files from the `custom_components/simplepush/` directory (folder) in this repository.
+1. Place the files you downloaded in the new directory (folder) you created.
+1. Restart Home Assistant
+1. In the HA UI go to "Settings" -> "Integrations" click "+" and search for "Simplepush"
 
-## How?
+## Configuration
 
-1. Create a new repository in GitHub, using this repository as a template by clicking the "Use this template" button in the GitHub UI.
-1. Open your new repository in Visual Studio Code devcontainer (Preferably with the "`Dev Containers: Clone Repository in Named Container Volume...`" option).
-1. Rename all instances of the `integration_blueprint` to `custom_components/<your_integration_domain>` (e.g. `custom_components/awesome_integration`).
-1. Rename all instances of the `Integration Blueprint` to `<Your Integration Name>` (e.g. `Awesome Integration`).
-1. Run the `scrtipts/develop` to start HA and test out your new integration.
+The configuration is done in the UI once you add Simplepush in the Integrations tab of the HA UI.
 
-## Next steps
+Just insert the Simplepush key of the device or devices you want to send notifications to.
+If you want to use end-to-end encrypted notifications, add your password and salt as configured in the app.
 
-These are some next steps you may want to look into:
-- Add tests to your integration, [`pytest-homeassistant-custom-component`](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) can help you get started.
-- Add brand images (logo/icon) to https://github.com/home-assistant/brands.
-- Create your first release.
-- Share your integration on the [Home Assistant Forum](https://community.home-assistant.io/).
-- Submit your integration to the [HACS](https://hacs.xyz/docs/publish/start).
+## Examples
+
+All examples are provided in YAML.
+
+To try them out you can create a new automation, edit the automation in YAML and copy paste the examples.
+After saving the automation you can run them to try them out.
+
+### Sending actionable notifications
+
+Sends an actionable notification with two actions (`yes` and `no`).
+If `yes` is selected by the recipient of the actionable notification, the message `success` is written to the logbook.
+If `no` is selected, nothing will happen.
+
+In the example, the `yes` action is associated with the id '123'.
+The id can then be used to filter incoming `simplepush_action_triggered_event` events.
+A `simplepush_action_triggered_event` event is triggered when an action of an associated actionable notification is selected.
+A timeout can be set with `action_timeout` to ignore all selected actions after the timeout.
+
+```
+alias: Actionable notification with Simplepush
+description: >-
+  Send an actionable notification and if triggered within 10 seconds, log success message to the
+  logbook
+trigger: []
+condition: []
+action:
+  - service: notify.simplepush
+    data:
+      message: actionable notification
+      data:
+        action_timeout: 10
+        actions:
+          - action: "yes"
+            id: 123
+          - action: "no"
+  - wait_for_trigger:
+      - platform: event
+        event_type: simplepush_action_triggered_event
+        event_data:
+          id: 123
+  - service: logbook.log
+    data:
+      name: Test
+      message: Success
+mode: restart
+```
+
+### Sending notifications with attachments
+
+This example automation sends a notification with two attachments to the configured Simplepush key.
+The first attachment is a JPG file while the second attachment is a video with a thumbnail.
+
+```
+alias: Attachments with Simplepush
+description: >-
+  Send a notification with two attachments
+trigger: []
+condition: []
+action:
+  - service: notify.simplepush
+    data:
+      message: test
+      data:
+        attachments:
+          - https://upload.wikimedia.org/wikipedia/commons/e/ee/Sample_abc.jpg
+          - video: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4
+            thumbnail: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerEscapes.jpg
+mode: restart
+```
+
+### Sending end-to-end encrypted notifications
+If you defined a password and salt during the configuration step, all outgoing notifications will be end-to-end encrypted.
+
+<!---->
+
+[simplepush]: https://simplepush.io
