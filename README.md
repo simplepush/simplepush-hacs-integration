@@ -95,13 +95,12 @@ mode: restart
 
 ### Sending notifications with attachments
 
-This example automation sends a notification with two attachments to the configured Simplepush key.
-The first attachment is a JPG file while the second attachment is a video with a thumbnail.
+This example automation sends a notification with four attachments to the configured Simplepush key.
 
 ```
 alias: Attachments with Simplepush
 description: >-
-  Send a notification with two attachments
+  Send a notification with four attachments
 trigger: []
 condition: []
 action:
@@ -110,9 +109,11 @@ action:
       message: test
       data:
         attachments:
-          - https://upload.wikimedia.org/wikipedia/commons/e/ee/Sample_abc.jpg
-          - video: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4
-            thumbnail: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerEscapes.jpg
+          - image: "https://upload.wikimedia.org/wikipedia/commons/e/ee/Sample_abc.jpg"
+          - image: "https://upload.wikimedia.org/wikipedia/commons/d/d3/Newtons_cradle_animation_book_2.gif"
+          - video: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+          - video: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+            thumbnail: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerEscapes.jpg"
 mode: restart
 ```
 
