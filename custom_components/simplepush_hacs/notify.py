@@ -94,12 +94,15 @@ class SimplePushNotificationService(BaseNotificationService):
                         if "id" in action:
                             action_ids.update({action["action"]: action["id"]})
 
+                # 48h
+                limit = 172800
                 try:
                     feedback_action_timeout = int(
                         data.get(ATTR_ACTION_TIMEOUT)
                     )
+                    feedback_action_timeout = min(feedback_action_timeout, limit)
                 except (ValueError, TypeError):
-                    feedback_action_timeout = 60
+                    feedback_action_timeout = limit
 
             attachments_data = data.get(ATTR_ATTACHMENTS)
             if isinstance(attachments_data, list):

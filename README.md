@@ -60,7 +60,9 @@ If `no` is selected, nothing will happen.
 In the example, the `yes` action is associated with the id '123'.
 The id can then be used to filter incoming `simplepush_action_triggered_event` events.
 A `simplepush_action_triggered_event` event is triggered when an action of an associated actionable notification is selected.
+
 A timeout can be set with `action_timeout` to ignore all selected actions after the timeout.
+If no `action_timeout` is set, a timeout automatically occurs after 48h.
 
 ```
 alias: Actionable notification with Simplepush
