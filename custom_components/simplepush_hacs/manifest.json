@@ -7,6 +7,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/simplepush/simplepush-hacs-integration/issues",
   "loggers": ["simplepush"],
-  "requirements": ["simplepush==2.2.2"],
-  "version": "1.0.1"
+  "requirements": ["simplepush==2.2.3"],
+  "version": "1.0.2"
 }
