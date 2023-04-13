@@ -1,5 +1,5 @@
 colorlog==6.7.0
 homeassistant==2022.2.0
 pip>=8.0.3,<23.1
-ruff==0.0.256
+ruff==0.0.261
 simplepush==2.2.3
