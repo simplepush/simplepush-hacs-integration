@@ -1,28 +1,63 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "This API token is already configured"
         },
         "error": {
-            "cannot_connect": "Failed to connect"
+            "cannot_connect": "Failed to connect",
+            "invalid_auth": "Invalid authentication"
         },
         "step": {
             "user": {
                 "data": {
-                    "device_key": "The device key of your device",
-                    "event": "The event for the events.",
+                    "api_token": "Your Simplepush API token",
                     "name": "Name",
-                    "password": "The password of the encryption used by your device",
-                    "salt": "The salt used by your device."
+                    "password": "Personal password. Encrypts tasks to your own devices. Leave empty for unencrypted tasks"
+                }
+            }
+        }
+    },
+    "config_subentries": {
+        "topic": {
+            "abort": {
+                "already_configured": "This topic is already added",
+                "reconfigure_successful": "Re-configuration was successful"
+            },
+            "entry_type": "Topic",
+            "error": {
+                "cannot_connect": "Failed to connect",
+                "invalid_auth": "Invalid authentication",
+                "unknown_topic": "The topic does not exist or you have not joined it"
+            },
+            "initiate_flow": {
+                "reconfigure": "Change password",
+                "user": "Add topic"
+            },
+            "step": {
+                "reconfigure": {
+                    "data": {
+                        "password": "Password"
+                    },
+                    "data_description": {
+                        "password": "The topic's password. Leave empty for unencrypted tasks."
+                    },
+                    "title": "Change the password of {topic}"
+                },
+                "user": {
+                    "data": {
+                        "password": "Password",
+                        "topic": "Topic"
+                    },
+                    "data_description": {
+                        "password": "The topic's password. Leave empty for unencrypted tasks.",
+                        "topic": "A topic you have joined in the Simplepush app. Home Assistant sends a test task to it."
+                    },
+                    "title": "Add topic"
                 }
             }
         }
     },
     "issues": {
-        "deprecated_yaml": {
-            "description": "Configuring Simplepush using YAML is being removed.\n\nYour existing YAML configuration has been imported into the UI automatically.\n\nRemove the Simplepush YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.",
-            "title": "The Simplepush YAML configuration is being removed"
-        },
         "removed_yaml": {
             "description": "Configuring Simplepush using YAML has been removed.\n\nYour existing YAML configuration is not used by Home Assistant.\n\nRemove the Simplepush YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.",
             "title": "The Simplepush YAML configuration has been removed"

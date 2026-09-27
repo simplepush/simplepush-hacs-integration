@@ -1,8 +1,5 @@
 {
     "config": {
-        "abort": {
-            "already_configured": "Apparaat is al geconfigureerd"
-        },
         "error": {
             "cannot_connect": "Kan geen verbinding maken"
         },
@@ -12,11 +9,6 @@
                     "name": "Naam"
                 }
             }
-        }
-    },
-    "issues": {
-        "deprecated_yaml": {
-            "title": "De Simplepush YAML-configuratie wordt verwijderd"
         }
     }
 }

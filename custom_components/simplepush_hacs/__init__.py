@@ -1,39 +1,73 @@
 """The simplepush component."""
 
+from __future__ import annotations
+
+import logging
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import discovery
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DATA_HASS_CONFIG, DOMAIN
+from .const import CONF_ENTRY_ID, CONF_TOPIC, CONF_TOPICS, DATA_HASS_CONFIG, DOMAIN
 
-PLATFORMS = [Platform.NOTIFY]
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the simplepush component."""
 
     hass.data[DATA_HASS_CONFIG] = config
+    hass.data.setdefault(DOMAIN, {})
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate a config entry."""
+    if entry.version == 1:
+        # Version 1 entries hold a device key, password and salt from the old
+        # Simplepush API. The current API authenticates with a user API token
+        # and addresses topics, so there is nothing to carry over.
+        _LOGGER.error(
+            "The Simplepush entry %s was created for the old device-key API. "
+            "Remove it and add Simplepush again with your API token",
+            entry.title,
+        )
+        return False
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up simplepush from a config entry."""
+    topics = {
+        subentry.data[CONF_TOPIC]: subentry.data.get(CONF_PASSWORD)
+        for subentry in entry.subentries.values()
+    }
 
     hass.async_create_task(
         discovery.async_load_platform(
             hass,
             Platform.NOTIFY,
             DOMAIN,
-            dict(entry.data),
+            {**entry.data, CONF_TOPICS: topics, CONF_ENTRY_ID: entry.entry_id},
             hass.data[DATA_HASS_CONFIG],
         )
     )
 
+    # Adding or removing a topic rebuilds the client with its password.
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry after its topics changed."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if service := hass.data[DOMAIN].pop(entry.entry_id, None):
+        await service.async_unregister_services()
+        await service.async_close()
+    return True

@@ -6,13 +6,17 @@ DOMAIN: Final = "simplepush_hacs"
 DEFAULT_NAME: Final = "Simplepush"
 DATA_HASS_CONFIG: Final = "simplepush_hass_config"
 
+CONF_TOPIC: Final = "topic"
+CONF_TOPICS: Final = "topics"
+CONF_ENTRY_ID: Final = "entry_id"
+
+SUBENTRY_TOPIC: Final = "topic"
+
 ATTR_ACTIONS: Final = "actions"
-ATTR_ATTACHMENTS: Final = "attachments"
-ATTR_ENCRYPTED: Final = "encrypted"
-ATTR_EVENT: Final = "event"
-ATTR_ACTION_TIMEOUT: Final = "action_timeout"
+ATTR_EXPIRES_IN: Final = "expires_in"
+ATTR_FILES: Final = "files"
+ATTR_LINKS: Final = "links"
+ATTR_PRIORITY: Final = "priority"
+ATTR_TOPIC: Final = "topic"
 
 EVENT_ACTION_TRIGGERED: Final = "simplepush_action_triggered_event"
-
-CONF_DEVICE_KEY: Final = "device_key"
-CONF_SALT: Final = "salt"
