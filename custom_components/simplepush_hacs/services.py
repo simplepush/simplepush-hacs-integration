@@ -50,10 +50,20 @@ ACTIONS_INPUT_SCHEMA = vol.Schema(
     }
 )
 
+TEXT_INPUT_SCHEMA = vol.Schema(
+    {
+        vol.Required("type"): "text",
+        vol.Optional("default_value"): cv.string,
+        vol.Optional("description"): cv.string,
+        vol.Optional("required", default=True): cv.boolean,
+    }
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
         "actions": ACTIONS_INPUT_SCHEMA,
+        "text": TEXT_INPUT_SCHEMA,
     },
 )
 

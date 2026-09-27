@@ -24,3 +24,4 @@ ATTR_TOPIC: Final = "topic"
 SERVICE_SEND_TASK: Final = "send_task"
 
 EVENT_ACTION_TRIGGERED: Final = "simplepush_action_triggered_event"
+EVENT_TASK_COMPLETED: Final = "simplepush_task_completed_event"

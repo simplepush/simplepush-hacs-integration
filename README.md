@@ -99,6 +99,7 @@ The response of `simplepush_hacs.send_task`:
 | `task_id` / `group_id` | The sent task. A task sent to a topic is a group with one task per recipient. |
 | `status` | `completed`, or how the task ended without an answer: `expired`, `declined`, `canceled` or `deleted`. |
 | `action`, `action_id` | The selected action's text and its `id`, when one was set. |
+| `text` | The text answer. |
 | `completed_at` | When the answer was given. |
 | `recipient`, `recipient_id` | Who answered. |
 
@@ -113,6 +114,7 @@ Each type can be used once.
 | Type | Options |
 | --- | --- |
 | `actions` | `actions`: the buttons. Each has an `action` (the button text), an optional `id` and an optional `style` (`primary` or `destructive`). |
+| `text` | `default_value`: text the field starts with. |
 
 ### Asking a question with actions
 
@@ -151,7 +153,42 @@ actions:
 mode: single
 ```
 
+### Asking for a text answer
+
+Asks what to do when the heater has been running for an hour and passes the answer to a conversation agent.
+With an LLM conversation agent the answer can be anything like "turn it off and close the blinds".
+The agent can control every entity exposed to Assist, so everyone who can answer the task can control them too.
+Only send such tasks to your own devices or a topic nobody else would guess.
+
+```yaml
+alias: Heater running long
+description: Ask what to do with the heater and let Assist do it
+triggers:
+  - trigger: state
+    entity_id: climate.living_room
+    to: heat
+    for: "01:00:00"
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      title: Heater
+      message: The living room heater has been on for an hour. What should I do?
+      inputs:
+        - type: text
+      expires_in: 1800
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.status == 'completed' }}"
+  - action: conversation.process
+    data:
+      text: "{{ answer.text }}"
+mode: single
+```
+
 ### Reacting to answers with events
+
+`simplepush_task_completed_event` is fired for every answer. It carries the same keys as the `simplepush_hacs.send_task` response.
 
 A `simplepush_action_triggered_event` event is fired when an action is selected, also for tasks sent with `notify`.
 The event carries `action_selected`, `action_selected_at`, `task_id`, the `id` when one was set, and `recipient` when the task went to a topic.

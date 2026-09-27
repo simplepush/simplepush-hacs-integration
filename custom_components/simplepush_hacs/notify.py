@@ -22,6 +22,8 @@ from simplepush import (
     TaskDeleted,
     TaskExpired,
     TaskGroup,
+    TextInput,
+    TextUpload,
 )
 import voluptuous as vol
 
@@ -51,6 +53,7 @@ from .const import (
     CONF_TOPICS,
     DOMAIN,
     EVENT_ACTION_TRIGGERED,
+    EVENT_TASK_COMPLETED,
 )
 from .services import NOTIFY_DATA_SCHEMA
 
@@ -131,6 +134,14 @@ def _build_inputs(
                 action_input.description = description
                 action_input.required = required
                 task_inputs.append(action_input)
+            case "text":
+                task_inputs.append(
+                    TextInput(
+                        description=description,
+                        default_value=entry.get("default_value"),
+                        required=required,
+                    )
+                )
     return task_inputs, action_lookup
 
 
@@ -325,6 +336,10 @@ class SimplePushNotificationService(BaseNotificationService):
             answer["recipient_id"] = actor.get("publicId")
 
         for upload in item.uploads:
+            if isinstance(upload, TextUpload):
+                if upload.value is not None:
+                    answer["text"] = upload.value
+                continue
             if not isinstance(upload, ActionUpload):
                 continue
             if upload.key is None or (action := action_lookup.get(upload.key)) is None:
@@ -348,4 +363,5 @@ class SimplePushNotificationService(BaseNotificationService):
                 payload["recipient_id"] = answer["recipient_id"]
             self.hass.bus.async_fire(EVENT_ACTION_TRIGGERED, payload)
 
+        self.hass.bus.async_fire(EVENT_TASK_COMPLETED, answer)
         return answer

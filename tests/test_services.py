@@ -8,6 +8,8 @@ from simplepush import (
     Event,
     TaskCompleted,
     TaskExpired,
+    TextInput,
+    TextUpload,
 )
 import voluptuous as vol
 
@@ -15,6 +17,7 @@ from custom_components.simplepush_hacs.const import (
     CONF_TOPIC,
     DOMAIN,
     EVENT_ACTION_TRIGGERED,
+    EVENT_TASK_COMPLETED,
     SERVICE_SEND_TASK,
     SUBENTRY_TOPIC,
 )
@@ -202,6 +205,65 @@ async def test_unknown_entry_is_refused(hass: HomeAssistant, client) -> None:
             {"config_entry_id": "missing", "message": "hello"},
             blocking=True,
         )
+
+
+async def test_text_input_answer(hass: HomeAssistant, client) -> None:
+    """A text input is required on its own and its answer is returned."""
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[TextUpload(id="inp_1", value="Moving furniture")],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+    events = async_capture_events(hass, EVENT_TASK_COMPLETED)
+
+    response = await _send(
+        hass,
+        client,
+        True,
+        expires_in=60,
+        inputs=[{"type": "text", "description": "Why?", "default_value": "Because"}],
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [
+        TextInput(description="Why?", default_value="Because", required=True)
+    ]
+    assert response == {
+        "task_id": "tsk_1",
+        "status": "completed",
+        "completed_at": "2026-09-27T10:00:00Z",
+        "text": "Moving furniture",
+    }
+    await hass.async_block_till_done()
+    assert [event.data for event in events] == [response]
+
+
+async def test_optional_text_next_to_actions(hass: HomeAssistant, client) -> None:
+    """A text with required: false is an optional note to the selected action."""
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[
+                ActionUpload(id="inp_1", key="1"),
+                TextUpload(id="inp_2", value="Guests are still here"),
+            ],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass,
+        client,
+        True,
+        expires_in=60,
+        inputs=[ACTIONS_INPUT, {"type": "text", "required": False}],
+    )
+
+    _, text_input = client.send_task.call_args.kwargs["inputs"]
+    assert text_input == TextInput(required=False)
+    assert response["action"] == "no"
+    assert response["text"] == "Guests are still here"
 
 
 async def test_shared_markdown_task_names_who_answered(
