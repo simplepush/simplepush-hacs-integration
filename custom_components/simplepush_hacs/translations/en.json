@@ -63,6 +63,18 @@
             "title": "The Simplepush YAML configuration has been removed"
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "delete_after": "Delete downloaded files after"
+                },
+                "data_description": {
+                    "delete_after": "Hours to keep photos, files and audio clips downloaded to the simplepush folder in your media. Leave empty to keep them."
+                }
+            }
+        }
+    },
     "services": {
         "send_notification": {
             "description": "Sends a notification to your Simplepush devices or a topic. Ask for a response to wait for the answer to its input.",

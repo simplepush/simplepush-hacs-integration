@@ -10,7 +10,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import discovery
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_ENTRY_ID, CONF_TOPIC, CONF_TOPICS, DATA_HASS_CONFIG, DOMAIN
+from .const import (
+    CONF_DELETE_AFTER,
+    CONF_ENTRY_ID,
+    CONF_TOPIC,
+    CONF_TOPICS,
+    DATA_HASS_CONFIG,
+    DOMAIN,
+)
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,12 +59,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             Platform.NOTIFY,
             DOMAIN,
-            {**entry.data, CONF_TOPICS: topics, CONF_ENTRY_ID: entry.entry_id},
+            {
+                **entry.data,
+                CONF_TOPICS: topics,
+                CONF_DELETE_AFTER: entry.options.get(CONF_DELETE_AFTER),
+                CONF_ENTRY_ID: entry.entry_id,
+            },
             hass.data[DATA_HASS_CONFIG],
         )
     )
 
-    # Adding or removing a topic rebuilds the client with its password.
+    # Changed topics or options rebuild the client and restart its listeners.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 

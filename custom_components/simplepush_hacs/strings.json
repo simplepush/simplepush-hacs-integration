@@ -57,6 +57,18 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "delete_after": "Delete downloaded files after"
+        },
+        "data_description": {
+          "delete_after": "Hours to keep photos, files and audio clips downloaded to the simplepush folder in your media. Leave empty to keep them."
+        }
+      }
+    }
+  },
   "issues": {
     "removed_yaml": {
       "title": "The Simplepush YAML configuration has been removed",

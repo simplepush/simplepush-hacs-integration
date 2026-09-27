@@ -13,13 +13,19 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
+    OptionsFlow,
     SubentryFlowResult,
 )
 from homeassistant.const import CONF_API_TOKEN, CONF_NAME, CONF_PASSWORD
 from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 
 from .client import create_client
-from .const import CONF_TOPIC, DEFAULT_NAME, DOMAIN, SUBENTRY_TOPIC
+from .const import CONF_DELETE_AFTER, CONF_TOPIC, DEFAULT_NAME, DOMAIN, SUBENTRY_TOPIC
 
 
 def validate_input(
@@ -64,6 +70,12 @@ class SimplePushFlowHandler(ConfigFlow, domain=DOMAIN):
     ) -> dict[str, type[ConfigSubentryFlow]]:
         """Topics are added to an entry as subentries."""
         return {SUBENTRY_TOPIC: TopicSubentryFlowHandler}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the settings flow of an entry."""
+        return SimplePushOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -171,4 +183,34 @@ class TopicSubentryFlowHandler(ConfigSubentryFlow):
             data_schema=vol.Schema({vol.Optional(CONF_PASSWORD): str}),
             description_placeholders={"topic": topic},
             errors=errors,
+        )
+
+
+class SimplePushOptionsFlow(OptionsFlow):
+    """Change how long downloaded files are kept."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show the settings."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Optional(CONF_DELETE_AFTER): NumberSelector(
+                            NumberSelectorConfig(
+                                min=1,
+                                step=1,
+                                unit_of_measurement="hours",
+                                mode=NumberSelectorMode.BOX,
+                            )
+                        ),
+                    }
+                ),
+                self.config_entry.options,
+            ),
         )

@@ -8,6 +8,7 @@ from functools import partial
 import logging
 import mimetypes
 from pathlib import Path
+import time
 from typing import Any
 
 from simplepush import (
@@ -40,6 +41,7 @@ from simplepush import (
     SliderInput,
     SliderUpload,
     StreamError,
+    Submission,
     TaskCanceled,
     TaskCompleted,
     TaskDeclined,
@@ -60,8 +62,9 @@ from homeassistant.components.notify import (
     BaseNotificationService,
 )
 from homeassistant.const import CONF_API_TOKEN, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
@@ -75,11 +78,13 @@ from .const import (
     ATTR_PRIORITY,
     ATTR_SHARED,
     ATTR_TOPIC,
+    CONF_DELETE_AFTER,
     CONF_ENTRY_ID,
     CONF_TOPICS,
     DOMAIN,
     EVENT_ACTION_TRIGGERED,
     EVENT_NOTIFICATION_COMPLETED,
+    EVENT_SUBMISSION_RECEIVED,
     EVENT_TASK_COMPLETED,
 )
 from .services import NOTIFY_DATA_SCHEMA
@@ -88,6 +93,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Service data keys of the old device-key API that no longer exist.
 _REMOVED_DATA_KEYS = ("action_timeout", "actions", "attachments", "event")
+
+# Wait before trying again to start listening for submissions.
+_SUBMISSIONS_RETRY_SECONDS = 30
 
 # Ends of a task without an answer, by the status reported for them.
 _TERMINAL_STATUS: dict[type, str] = {
@@ -118,6 +126,7 @@ async def async_get_service(
 
     service = SimplePushNotificationService(hass, discovery_info)
     hass.data[DOMAIN][discovery_info[CONF_ENTRY_ID]] = service
+    service.async_start()
     return service
 
 
@@ -226,6 +235,23 @@ def _build_notification_input(
     raise ValueError(f"Unknown notification input type {entry['type']}")
 
 
+def _delete_old_files(folder: Path, max_age: float) -> None:
+    """Delete files in `folder` older than `max_age` seconds, then empty folders."""
+    if not folder.is_dir():
+        return
+    cutoff = time.time() - max_age
+    # Deepest paths first, so a folder is empty once its old files are gone.
+    for path in sorted(folder.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        try:
+            if path.is_file():
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+            elif not any(path.iterdir()):
+                path.rmdir()
+        except OSError as err:
+            _LOGGER.warning("Failed to delete %s: %s", path, err)
+
+
 # Content types the app sends that Python's mimetypes does not know.
 _EXTENSIONS = {"audio/m4a": ".m4a", "audio/x-m4a": ".m4a"}
 
@@ -253,9 +279,31 @@ class SimplePushNotificationService(BaseNotificationService):
         self._client = create_client(
             config[CONF_API_TOKEN], config.get(CONF_PASSWORD), self.topics
         )
+        # Hours to keep downloaded files, or None to keep them.
+        self._delete_after: float | None = config.get(CONF_DELETE_AFTER)
+        self._submissions_task: asyncio.Task[None] | None = None
+        self._stop_cleanup: Any = None
+
+    @callback
+    def async_start(self) -> None:
+        """Listen for submissions and delete old downloads."""
+        self._submissions_task = self.hass.async_create_background_task(
+            self._listen_submissions(), name="simplepush submissions"
+        )
+        if self._delete_after is not None:
+            self.hass.async_create_background_task(
+                self._async_delete_old_files(), name="simplepush cleanup"
+            )
+            self._stop_cleanup = async_track_time_interval(
+                self.hass, self._async_delete_old_files, timedelta(hours=1)
+            )
 
     async def async_close(self) -> None:
-        """Close the client's event connection."""
+        """Stop the listeners and close the client's event connection."""
+        if self._submissions_task is not None:
+            self._submissions_task.cancel()
+        if self._stop_cleanup is not None:
+            self._stop_cleanup()
         await self._client.aclose()
 
     async def async_send_message(self, message: str, **kwargs: Any) -> None:
@@ -694,3 +742,71 @@ class SimplePushNotificationService(BaseNotificationService):
                 f"media-source://media_source/local/{folder}/{path.name}"
             )
         return saved
+
+    async def _async_delete_old_files(self, _now: datetime | None = None) -> None:
+        """Delete downloads older than the configured number of hours."""
+        assert self._delete_after is not None
+        base, _ = self._media_folder()
+        await self.hass.async_add_executor_job(
+            _delete_old_files, base / "simplepush", self._delete_after * 3600
+        )
+
+    async def _listen_submissions(self) -> None:
+        """Fire a Home Assistant event for every submission.
+
+        The client reconnects on its own and resumes where it left off, so only
+        a failure that won't go away ends the stream.
+        """
+        while True:
+            try:
+                # Building the stream fetches the password salt over HTTP.
+                submissions = await self.hass.async_add_executor_job(
+                    self._client.submissions
+                )
+                break
+            except ApiError as err:
+                if 400 <= err.status < 500:
+                    _LOGGER.error("Can't listen for submissions: %s", err)
+                    return
+                failure: Exception = err
+            except OSError as err:
+                failure = err
+            _LOGGER.warning(
+                "Failed to start listening for submissions, retrying in %s seconds: %s",
+                _SUBMISSIONS_RETRY_SECONDS,
+                failure,
+            )
+            await asyncio.sleep(_SUBMISSIONS_RETRY_SECONDS)
+
+        try:
+            async for submission in submissions:
+                await self._submission_received(submission)
+        except StreamError as err:
+            _LOGGER.error("Stopped listening for submissions: %s", err)
+
+    async def _submission_received(self, submission: Submission) -> None:
+        """Download the files of a submission and fire its event."""
+        data: dict[str, Any] = {
+            "submission_id": submission.id,
+            "submitted_at": submission.created_at,
+        }
+        if actor := submission.raw.actor:
+            data["sender"] = actor.get("name")
+            data["sender_id"] = actor.get("publicId")
+        if submission.body is not None and submission.body.text is not None:
+            data["text"] = submission.body.text
+        if (location := submission.location) is not None:
+            for key in ("latitude", "longitude", "accuracy"):
+                if (value := getattr(location, key)) is not None:
+                    data[key] = value
+
+        folder = "simplepush/submissions"
+        for key, upload in (
+            ("photo", submission.photo),
+            ("file", submission.file),
+            ("audio", submission.audio),
+        ):
+            if upload is not None:
+                data.update(await self._save_file(folder, upload, key))
+
+        self.hass.bus.async_fire(EVENT_SUBMISSION_RECEIVED, data)

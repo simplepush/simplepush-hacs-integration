@@ -9,7 +9,9 @@ Home Assistant sends two kinds of messages:
 - Tasks stay in the Simplepush app after the push is gone. They can ask for actions, text, photos and choices, and carry files and links.
 - Notifications are a push with at most one input answered right from the push, and an image, audio clip or link.
 
-Both work without any form of remote access to Home Assistant and can be end-to-end encrypted.
+In the other direction, submissions you send from the app (text, a location, a photo, a file or a voice recording) arrive in Home Assistant as events.
+
+All of it works without any form of remote access to Home Assistant and can be end-to-end encrypted.
 
 ## Installation
 
@@ -56,6 +58,14 @@ Home Assistant sends a test task to the topic.
 To change the password later, select "Change password" on the topic.
 
 Automations pick the topic with `topic`. A task without `topic` goes to your own devices.
+
+### Downloaded files
+
+Photos from answers and the photos, files and voice recordings of submissions are downloaded to the `simplepush` folder of your local media folder.
+They show up in the media browser and can be attached with `files` again.
+To delete them automatically, open the Simplepush entry, select "Configure" and set "Delete downloaded files after" to a number of hours.
+Home Assistant then deletes older files in the `simplepush` folder at startup and every hour. Leave it empty to keep them.
+Copy a file elsewhere in an automation when it has to stay.
 
 ### Upgrading from version 1.x
 
@@ -480,6 +490,90 @@ actions:
     data:
       name: Pool pump
       message: "{{ trigger.event.data.recipient }} wants the pump off"
+mode: queued
+```
+
+### Receiving submissions
+
+A submission is something you send from the Simplepush app without a task: a text, your location, a photo, a file or a voice recording, or several of them at once.
+Each submission fires `simplepush_submission_received_event`. Only submissions from your own account arrive.
+
+| Key | Description |
+| --- | --- |
+| `submission_id`, `submitted_at` | The submission and when it was sent. |
+| `sender`, `sender_id` | Who sent it. |
+| `text` | The text. |
+| `latitude`, `longitude`, `accuracy` | The location, with its accuracy in meters. |
+| `photo`, `file`, `audio` | File path of the downloaded photo, file or voice recording in `simplepush/submissions/` of your local media folder, named by its file id. |
+| `photo_media_content_id`, `file_media_content_id`, `audio_media_content_id` | Their media source ids, for actions that take media. |
+
+Submissions sent while Home Assistant is not running are not received later.
+
+#### Commands from the app
+
+Passes every text you send from the app to a conversation agent, like typing it into Assist.
+With an LLM conversation agent it can be anything like "turn off all lights downstairs".
+
+```yaml
+alias: Commands from Simplepush
+description: Let Assist act on texts sent from the Simplepush app
+triggers:
+  - trigger: event
+    event_type: simplepush_submission_received_event
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.text is defined }}"
+actions:
+  - action: conversation.process
+    data:
+      agent_id: conversation.claude  # your conversation agent
+      text: "{{ trigger.event.data.text }}"
+mode: queued
+```
+
+#### Remembering where you parked
+
+Stores the location of a submission in a text helper, for a map card or a later automation.
+
+```yaml
+alias: Parked here
+description: Keep the location sent from the Simplepush app
+triggers:
+  - trigger: event
+    event_type: simplepush_submission_received_event
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.latitude is defined }}"
+actions:
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.parked_at  # a text helper
+    data:
+      value: "{{ trigger.event.data.latitude }},{{ trigger.event.data.longitude }}"
+mode: queued
+```
+
+#### Sharing photos with the family
+
+Forwards every photo you send from the app to a family topic.
+
+```yaml
+alias: Share photos
+description: Forward photos sent from the Simplepush app to the family
+triggers:
+  - trigger: event
+    event_type: simplepush_submission_received_event
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.photo is defined }}"
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      topic: family-x1si3j1
+      title: New photo
+      message: "{{ trigger.event.data.sender }} shared a photo."
+      files: "{{ trigger.event.data.photo }}"
 mode: queued
 ```
 
