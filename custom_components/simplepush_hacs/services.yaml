@@ -48,3 +48,53 @@ send_task:
       example: '[{"type": "actions", "actions": [{"action": "Close"}, {"action": "Leave open"}]}, {"type": "text", "required": false}, {"type": "photo"}, {"type": "choice", "options": ["Now", "Later"]}, {"type": "slider", "min": 15, "max": 25, "unit": "°C"}, {"type": "voice"}, {"type": "location"}, {"type": "file"}]'
       selector:
         object:
+send_notification:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: simplepush_hacs
+    message:
+      required: true
+      example: Turn on the coffee machine?
+      selector:
+        text:
+          multiline: true
+    title:
+      example: Coffee
+      selector:
+        text:
+    topic:
+      selector:
+        text:
+    shared:
+      selector:
+        boolean:
+    priority:
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: slider
+    image:
+      example: /config/www/front-door.jpg
+      selector:
+        text:
+    audio:
+      selector:
+        text:
+    link:
+      example: https://homeassistant.local:8123/dashboard-cameras
+      selector:
+        text:
+    input:
+      example: '{"type": "actions", "actions": [{"action": "Turn on", "id": "coffee_on"}, {"action": "Not now"}]}'
+      selector:
+        object:
+    timeout:
+      selector:
+        number:
+          min: 1
+          unit_of_measurement: seconds
+          mode: box

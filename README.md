@@ -5,12 +5,11 @@ _Integration to integrate with [Simplepush][simplepush]._
 Simplepush is a lightweight app for iOS and Android.
 It is used to send notifications to your phone or to everyone subscribed to a topic.
 
-Every message from Home Assistant arrives as a task in the Simplepush app, so it stays in the app after the push is gone.
+Home Assistant sends two kinds of messages:
+- Tasks stay in the Simplepush app after the push is gone. They can ask for actions, text, photos and choices, and carry files and links.
+- Notifications are a push with at most one input answered right from the push, and an image, audio clip or link.
 
-This integration supports the following:
-- Actionable tasks which work without any form of remote access to Home Assistant
-- Files and links attached to a task
-- Tasks can be end-to-end encrypted
+Both work without any form of remote access to Home Assistant and can be end-to-end encrypted.
 
 ## Installation
 
@@ -130,6 +129,50 @@ Each type can be used once.
 | `voice` | A voice recording. It is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 | `location` | The recipient's current location. |
 | `file` | A file the recipient picks. It is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
+
+### Sending notifications
+
+`simplepush_hacs.send_notification` sends a notification instead of a task.
+It takes `config_entry_id`, `message`, `title`, `topic`, `shared` and `priority` like `simplepush_hacs.send_task`, and these options:
+
+| Key | Description |
+| --- | --- |
+| `input` | One input answered from the push: `type: text`, `type: choice` with up to 3 `options`, or `type: actions` with up to 3 `actions` like an `actions` input. Android shows at most 3 buttons on a push. |
+| `image` | URL or local file of an image shown in the push. Local files follow the same rules as `files`. |
+| `audio` | URL or local file of an audio clip, instead of an image. |
+| `link` | URL opened by an "Open link" button on the push, instead of an input. |
+| `timeout` | Seconds to wait for the answer when called with `response_variable`. Required to wait. |
+
+A notification does not expire. The response is the first answer with the same keys as a task's (`text`, `choice`, `action`, `action_id`, `recipient`), `notification_id` or `group_id`, and `status`: `completed`, or `pending` when nobody answered in time.
+An answer after the timeout still fires `simplepush_notification_completed_event`.
+
+```yaml
+alias: Coffee in the morning
+description: Ask on the lock screen whether to start the coffee machine
+triggers:
+  - trigger: time
+    at: "06:30:00"
+actions:
+  - action: simplepush_hacs.send_notification
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      title: Coffee
+      message: Turn on the coffee machine?
+      input:
+        type: actions
+        actions:
+          - action: Turn on
+            id: coffee_on
+          - action: Not now
+      timeout: 900
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.action_id == 'coffee_on' }}"
+  - action: switch.turn_on
+    target:
+      entity_id: switch.coffee_machine
+mode: single
+```
 
 ### Asking a question with actions
 
@@ -414,7 +457,8 @@ mode: single
 
 ### Reacting to answers with events
 
-`simplepush_task_completed_event` is fired for every answer. It carries the same keys as the `simplepush_hacs.send_task` response.
+`simplepush_task_completed_event` is fired for every answer to a task. It carries the same keys as the `simplepush_hacs.send_task` response.
+`simplepush_notification_completed_event` is fired for every answer to a notification, with the keys of the `simplepush_hacs.send_notification` response.
 
 A `simplepush_action_triggered_event` event is fired when an action is selected, also for tasks sent with `notify`.
 The event carries `action_selected`, `action_selected_at`, `task_id`, the `id` when one was set, and `recipient` when the task went to a topic.

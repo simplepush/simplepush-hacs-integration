@@ -64,6 +64,56 @@
         }
     },
     "services": {
+        "send_notification": {
+            "description": "Sends a notification to your Simplepush devices or a topic. Ask for a response to wait for the answer to its input.",
+            "fields": {
+                "audio": {
+                    "description": "URL or local file of an audio clip. Not together with image.",
+                    "name": "Audio"
+                },
+                "config_entry_id": {
+                    "description": "The Simplepush entry to send with.",
+                    "name": "Simplepush entry"
+                },
+                "image": {
+                    "description": "URL or local file of an image shown in the push. Not together with audio.",
+                    "name": "Image"
+                },
+                "input": {
+                    "description": "One input answered from the push: type text, choice (up to 3 options) or actions (up to 3 actions).",
+                    "name": "Input"
+                },
+                "link": {
+                    "description": "URL opened by an Open link button on the push. Not together with input.",
+                    "name": "Link"
+                },
+                "message": {
+                    "description": "Content of the notification.",
+                    "name": "Message"
+                },
+                "priority": {
+                    "description": "How loudly the push interrupts, 1 (minimal) to 5 (critical). Default 3.",
+                    "name": "Priority"
+                },
+                "shared": {
+                    "description": "Send one notification that everyone on the topic sees. The first answer settles it for all.",
+                    "name": "Shared"
+                },
+                "timeout": {
+                    "description": "Seconds to wait for the answer when a response is requested. The notification can still be answered afterwards.",
+                    "name": "Timeout"
+                },
+                "title": {
+                    "description": "Title of the notification.",
+                    "name": "Title"
+                },
+                "topic": {
+                    "description": "Topic to send to. It must be added to the Simplepush entry. Leave empty to send to your own devices.",
+                    "name": "Topic"
+                }
+            },
+            "name": "Send notification"
+        },
         "send_task": {
             "description": "Sends a task to your Simplepush devices or a topic. Ask for a response to wait for the first answer.",
             "fields": {

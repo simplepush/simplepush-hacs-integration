@@ -113,6 +113,56 @@
           "description": "What the recipient answers, in order. Each entry has a type, an optional description and required (default true). The README lists the options of each type."
         }
       }
+    },
+    "send_notification": {
+      "name": "Send notification",
+      "description": "Sends a notification to your Simplepush devices or a topic. Ask for a response to wait for the answer to its input.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Simplepush entry",
+          "description": "The Simplepush entry to send with."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Content of the notification."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Title of the notification."
+        },
+        "topic": {
+          "name": "Topic",
+          "description": "Topic to send to. It must be added to the Simplepush entry. Leave empty to send to your own devices."
+        },
+        "shared": {
+          "name": "Shared",
+          "description": "Send one notification that everyone on the topic sees. The first answer settles it for all."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "How loudly the push interrupts, 1 (minimal) to 5 (critical). Default 3."
+        },
+        "image": {
+          "name": "Image",
+          "description": "URL or local file of an image shown in the push. Not together with audio."
+        },
+        "audio": {
+          "name": "Audio",
+          "description": "URL or local file of an audio clip. Not together with image."
+        },
+        "link": {
+          "name": "Link",
+          "description": "URL opened by an Open link button on the push. Not together with input."
+        },
+        "input": {
+          "name": "Input",
+          "description": "One input answered from the push: type text, choice (up to 3 options) or actions (up to 3 actions)."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Seconds to wait for the answer when a response is requested. The notification can still be answered afterwards."
+        }
+      }
     }
   }
 }

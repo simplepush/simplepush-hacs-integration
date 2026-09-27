@@ -22,9 +22,19 @@ from simplepush import (
     FileUpload,
     FileUploadInput,
     GroupInput,
+    GroupNotification,
     LocationInput,
     LocationUpload,
     MultiChoiceUpload,
+    NotificationActionInput,
+    NotificationActionReply,
+    NotificationChoiceInput,
+    NotificationChoiceReply,
+    NotificationCompleted,
+    NotificationGroup,
+    NotificationInput,
+    NotificationTextInput,
+    NotificationTextReply,
     PhotoInput,
     PhotoUpload,
     SliderInput,
@@ -69,6 +79,7 @@ from .const import (
     CONF_TOPICS,
     DOMAIN,
     EVENT_ACTION_TRIGGERED,
+    EVENT_NOTIFICATION_COMPLETED,
     EVENT_TASK_COMPLETED,
 )
 from .services import NOTIFY_DATA_SCHEMA
@@ -200,6 +211,21 @@ def _build_inputs(
     return task_inputs, action_lookup
 
 
+def _build_notification_input(
+    entry: dict[str, Any],
+) -> tuple[NotificationInput, dict[str, tuple[str, Any]]]:
+    """Turn validated `input` data into a notification input and its action lookup."""
+    match entry["type"]:
+        case "text":
+            return NotificationTextInput(), {}
+        case "choice":
+            return NotificationChoiceInput(options=entry["options"]), {}
+        case "actions":
+            action_input, action_lookup = _build_actions(entry["actions"])
+            return NotificationActionInput(actions=action_input.actions), action_lookup
+    raise ValueError(f"Unknown notification input type {entry['type']}")
+
+
 # Content types the app sends that Python's mimetypes does not know.
 _EXTENSIONS = {"audio/m4a": ".m4a", "audio/x-m4a": ".m4a"}
 
@@ -298,15 +324,8 @@ class SimplePushNotificationService(BaseNotificationService):
                 "Set expires_in to wait for the answer to a task"
             )
 
-        if files and (
-            blocked := await self.hass.async_add_executor_job(
-                self._disallowed_files, files
-            )
-        ):
-            raise ServiceValidationError(
-                "Files outside the allowed directories were not sent: "
-                f"{', '.join(blocked)}. Add their directory to allowlist_external_dirs"
-            )
+        if files:
+            await self._check_allowed(files)
 
         expires_at = None
         if expires_in is not None:
@@ -353,6 +372,172 @@ class SimplePushNotificationService(BaseNotificationService):
     def _disallowed_files(self, files: list[str]) -> list[str]:
         """Files Home Assistant does not allow to be read from outside."""
         return [path for path in files if not self.hass.config.is_allowed_path(path)]
+
+    async def _check_allowed(self, files: list[str]) -> None:
+        """Refuse files outside the directories Home Assistant allows."""
+        if blocked := await self.hass.async_add_executor_job(
+            self._disallowed_files, files
+        ):
+            raise ServiceValidationError(
+                "Files outside the allowed directories were not sent: "
+                f"{', '.join(blocked)}. Add their directory to allowlist_external_dirs"
+            )
+
+    async def async_send_notification(
+        self,
+        *,
+        message: str,
+        title: str,
+        topic: str | None,
+        shared: bool,
+        priority: int | None,
+        image: str | None,
+        audio: str | None,
+        link: str | None,
+        notification_input: dict[str, Any] | None,
+        timeout: float | None,
+        wait: bool,
+    ) -> dict[str, Any]:
+        """Send a notification and return its id.
+
+        With `wait` and an input, the first answer within `timeout` seconds is
+        returned as well. Every answer also fires the Home Assistant event.
+        """
+        if topic is not None and topic not in self.topics:
+            raise ServiceValidationError(
+                f"Add the topic {topic} to the Simplepush entry before sending to it"
+            )
+
+        sdk_input: NotificationInput | None = None
+        action_lookup: dict[str, tuple[str, Any]] = {}
+        if notification_input is not None:
+            sdk_input, action_lookup = _build_notification_input(notification_input)
+        wait = wait and sdk_input is not None
+        if wait and timeout is None:
+            raise ServiceValidationError(
+                "Set timeout to wait for the answer to a notification"
+            )
+
+        local_media = [
+            path
+            for path in (image, audio)
+            if path and not path.startswith(("http://", "https://"))
+        ]
+        if local_media:
+            await self._check_allowed(local_media)
+
+        send = partial(
+            self._client.send_notification,
+            topic=topic,
+            title=title,
+            content=message,
+            input=sdk_input,
+            image=image,
+            audio=audio,
+            link=link,
+            priority=priority,
+            shared=shared,
+        )
+        try:
+            sent = await self.hass.async_add_executor_job(send)
+        except ApiError as err:
+            raise HomeAssistantError(
+                f"Simplepush rejected the notification: {err}"
+            ) from err
+        except (OSError, ValueError, TypeError) as err:
+            raise HomeAssistantError(f"Failed to send the notification: {err}") from err
+
+        response: dict[str, Any] = (
+            {"group_id": sent.group_id}
+            if isinstance(sent, NotificationGroup)
+            else {"notification_id": sent.notification_id}
+        )
+        if sdk_input is None:
+            return response
+
+        result = self.hass.loop.create_future() if wait else None
+        self.hass.async_create_background_task(
+            self._collect_notification_answers(sent, action_lookup, result),
+            name="simplepush notification answers",
+        )
+        if result is None:
+            return response
+        try:
+            # A notification does not expire; an answer after the timeout
+            # still fires the event.
+            answer = await asyncio.wait_for(asyncio.shield(result), timeout)
+        except TimeoutError:
+            return {**response, "status": "pending"}
+        return {**response, **answer}
+
+    async def _collect_notification_answers(
+        self,
+        sent: Any,
+        action_lookup: dict[str, tuple[str, Any]],
+        result: asyncio.Future[dict[str, Any]] | None,
+    ) -> None:
+        """Fire a Home Assistant event for every answer to a notification.
+
+        `result` receives the first answer.
+        """
+        try:
+            async for event in sent.inputs(replay=True):
+                item = event.item if isinstance(event, GroupNotification) else event
+                if not isinstance(item, NotificationCompleted):
+                    continue
+                answer = self._notification_answer(sent, event, item, action_lookup)
+                if result is not None and not result.done():
+                    result.set_result(answer)
+        except StreamError as err:
+            _LOGGER.error("Lost the connection while waiting for answers: %s", err)
+            if result is not None and not result.done():
+                result.set_exception(
+                    HomeAssistantError(
+                        f"Lost the connection while waiting for the answer: {err}"
+                    )
+                )
+        finally:
+            if result is not None and not result.done():
+                result.set_result({"status": "closed"})
+
+    def _notification_answer(
+        self,
+        sent: Any,
+        event: Any,
+        item: NotificationCompleted,
+        action_lookup: dict[str, tuple[str, Any]],
+    ) -> dict[str, Any]:
+        """Build the answer to a notification and fire its event."""
+        answer: dict[str, Any] = {
+            "status": "completed",
+            "notification_id": item.notification_id,
+            "completed_at": item.raw.created_at,
+        }
+        if isinstance(sent, NotificationGroup) and event.recipient:
+            answer["recipient"] = event.recipient.name
+            answer["recipient_id"] = event.recipient.public_id
+        elif actor := item.raw.actor:
+            answer["recipient"] = actor.get("name")
+            answer["recipient_id"] = actor.get("publicId")
+
+        match item.reply:
+            case NotificationTextReply(value=value) if value is not None:
+                answer["text"] = value
+            case NotificationChoiceReply(selected_value=value) if value is not None:
+                answer["choice"] = value
+            case NotificationActionReply(selected_key=key):
+                if key is None or (action := action_lookup.get(key)) is None:
+                    _LOGGER.warning(
+                        "Unknown action selected on notification %s",
+                        item.notification_id,
+                    )
+                else:
+                    answer["action"], action_id = action
+                    if action_id is not None:
+                        answer["action_id"] = action_id
+
+        self.hass.bus.async_fire(EVENT_NOTIFICATION_COMPLETED, answer)
+        return answer
 
     async def _collect_answers(
         self,
