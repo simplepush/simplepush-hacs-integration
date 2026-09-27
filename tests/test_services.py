@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from simplepush import (
+    Location,
+    LocationInput,
+    LocationUpload,
     VoiceRecordingInput,
     VoiceUpload,
     ActionUpload,
@@ -547,6 +550,33 @@ async def test_voice_answer_is_saved_to_media(
     assert path.read_bytes() == b"audio bytes"
     assert response["voice"] == str(path)
     assert response["voice_duration"] == 4.2
+
+
+async def test_location_answer(hass: HomeAssistant, client) -> None:
+    """A location answer returns its coordinates and accuracy."""
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[
+                LocationUpload(
+                    id="inp_1",
+                    location=Location(latitude=52.5, longitude=13.4, accuracy=8.0),
+                )
+            ],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass, client, True, expires_in=60, inputs=[{"type": "location"}]
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [LocationInput(required=True)]
+    assert (response["latitude"], response["longitude"], response["accuracy"]) == (
+        52.5,
+        13.4,
+        8.0,
+    )
 
 
 @pytest.mark.parametrize(

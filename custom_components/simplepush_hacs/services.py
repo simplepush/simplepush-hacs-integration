@@ -118,6 +118,14 @@ VOICE_INPUT_SCHEMA = vol.Schema(
     }
 )
 
+LOCATION_INPUT_SCHEMA = vol.Schema(
+    {
+        vol.Required("type"): "location",
+        vol.Optional("description"): cv.string,
+        vol.Optional("required", default=True): cv.boolean,
+    }
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
@@ -127,6 +135,7 @@ INPUT_SCHEMA = cv.key_value_schemas(
         "choice": CHOICE_INPUT_SCHEMA,
         "slider": SLIDER_INPUT_SCHEMA,
         "voice": VOICE_INPUT_SCHEMA,
+        "location": LOCATION_INPUT_SCHEMA,
     },
 )
 

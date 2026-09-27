@@ -107,6 +107,7 @@ The response of `simplepush_hacs.send_task`:
 | `photo_media_content_id` | Media source id of the saved photo, for actions that take media. |
 | `voice`, `voice_media_content_id` | File path and media source id of the saved voice recording. |
 | `voice_duration` | Length of the voice recording in seconds. |
+| `latitude`, `longitude`, `accuracy` | The answered location, with its accuracy in meters. |
 | `completed_at` | When the answer was given. |
 | `recipient`, `recipient_id` | Who answered. |
 
@@ -126,6 +127,7 @@ Each type can be used once.
 | `choice` | `options`: at least two. `multi`: allow choosing several. `min_selections`, `max_selections`: how many with `multi`. |
 | `slider` | `min`, `max`: the scale. `step`: the steps in between, continuous without it. `unit`: a short label like `°C`. `default_value`: where the slider starts. |
 | `voice` | A voice recording. It is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
+| `location` | The recipient's current location. |
 
 ### Asking a question with actions
 
@@ -340,6 +342,40 @@ actions:
     data:
       media_content_id: "{{ answer.voice_media_content_id }}"
       media_content_type: music
+mode: single
+```
+
+### Asking where someone is
+
+Asks the dog sitter where they are during the afternoon walk and shows them on the map.
+The recipient decides to answer, nothing is tracked in the background.
+
+```yaml
+alias: Where is the dog sitter
+description: Ask for the dog sitter's location and put it on the map
+triggers:
+  - trigger: time
+    at: "14:00:00"
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      topic: dogsitter-q8f2k1
+      title: Walk
+      message: Where are you and Bello right now?
+      inputs:
+        - type: location
+      expires_in: 1800
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.latitude is defined }}"
+  - action: device_tracker.see
+    data:
+      dev_id: dog_sitter
+      gps:
+        - "{{ answer.latitude }}"
+        - "{{ answer.longitude }}"
+      gps_accuracy: "{{ answer.accuracy | default(0) | int }}"
 mode: single
 ```
 

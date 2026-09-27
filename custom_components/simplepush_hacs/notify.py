@@ -20,6 +20,8 @@ from simplepush import (
     ContentFormat,
     DownloadError,
     GroupInput,
+    LocationInput,
+    LocationUpload,
     MultiChoiceUpload,
     PhotoInput,
     PhotoUpload,
@@ -184,6 +186,10 @@ def _build_inputs(
             case "voice":
                 task_inputs.append(
                     VoiceRecordingInput(description=description, required=required)
+                )
+            case "location":
+                task_inputs.append(
+                    LocationInput(description=description, required=required)
                 )
     return task_inputs, action_lookup
 
@@ -402,6 +408,12 @@ class SimplePushNotificationService(BaseNotificationService):
                 )
                 if upload.duration_seconds is not None:
                     answer["voice_duration"] = upload.duration_seconds
+                continue
+            if isinstance(upload, LocationUpload):
+                if (location := upload.location) is not None:
+                    for key in ("latitude", "longitude", "accuracy"):
+                        if (value := getattr(location, key)) is not None:
+                            answer[key] = value
                 continue
             if isinstance(upload, SliderUpload):
                 if upload.value is not None:
