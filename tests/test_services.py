@@ -12,6 +12,8 @@ from simplepush import (
     MultiChoiceUpload,
     PhotoInput,
     PhotoUpload,
+    SliderInput,
+    SliderUpload,
     TaskCompleted,
     TaskExpired,
     TextInput,
@@ -458,6 +460,57 @@ async def test_input_type_used_twice_is_refused(hass: HomeAssistant, client) -> 
     """Each input type can only be used once in a task."""
     with pytest.raises(ServiceValidationError, match="only be used once"):
         await _send(hass, client, False, inputs=[ACTIONS_INPUT, ACTIONS_INPUT])
+
+    client.send_task.assert_not_called()
+
+
+async def test_slider_answer(hass: HomeAssistant, client) -> None:
+    """A slider's scale is sent and the chosen number returned."""
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[SliderUpload(id="inp_1", value=21.5)],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass,
+        client,
+        True,
+        expires_in=60,
+        inputs=[
+            {
+                "type": "slider",
+                "min": 16,
+                "max": 24,
+                "step": 0.5,
+                "unit": "°C",
+                "default_value": 21,
+            }
+        ],
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [
+        SliderInput(
+            min=16, max=24, step=0.5, unit="°C", default_value=21, required=True
+        )
+    ]
+    assert response["slider"] == 21.5
+
+
+@pytest.mark.parametrize(
+    "slider",
+    [
+        {"type": "slider", "min": 10, "max": 10},
+        {"type": "slider", "min": 0, "max": 10, "default_value": 11},
+        {"type": "slider", "min": 0, "max": 10, "step": 0},
+    ],
+)
+async def test_unusable_slider_is_refused(hass: HomeAssistant, client, slider) -> None:
+    """A slider without a usable scale is refused by the schema."""
+    with pytest.raises(vol.Invalid):
+        await _send(hass, client, False, inputs=[slider])
 
     client.send_task.assert_not_called()
 

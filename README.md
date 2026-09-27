@@ -102,6 +102,7 @@ The response of `simplepush_hacs.send_task`:
 | `text` | The text answer. |
 | `choice` | The chosen option. |
 | `choices` | The chosen options, with `multi`. |
+| `slider` | The number chosen on a slider. |
 | `photo` | File path of the saved photo. |
 | `photo_media_content_id` | Media source id of the saved photo, for actions that take media. |
 | `completed_at` | When the answer was given. |
@@ -121,6 +122,7 @@ Each type can be used once.
 | `text` | `default_value`: text the field starts with. |
 | `photo` | The photo is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 | `choice` | `options`: at least two. `multi`: allow choosing several. `min_selections`, `max_selections`: how many with `multi`. |
+| `slider` | `min`, `max`: the scale. `step`: the steps in between, continuous without it. `unit`: a short label like `°C`. `default_value`: where the slider starts. |
 
 ### Asking a question with actions
 
@@ -263,6 +265,46 @@ actions:
             entity_id: todo.shopping_list
           data:
             item: "{{ repeat.item }}"
+mode: single
+```
+
+### Asking for a number
+
+Asks for the temperature when someone comes home to a cold house and sets the thermostat to the answer.
+
+```yaml
+alias: Warm up the living room
+description: Ask for the temperature and set the thermostat
+triggers:
+  - trigger: state
+    entity_id: person.alex
+    to: home
+conditions:
+  - condition: numeric_state
+    entity_id: sensor.living_room_temperature
+    below: 18
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      title: Heating
+      message: It's cold in the living room. How warm should it get?
+      inputs:
+        - type: slider
+          min: 16
+          max: 24
+          step: 0.5
+          unit: "°C"
+          default_value: 21
+      expires_in: 900
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.slider is defined }}"
+  - action: climate.set_temperature
+    target:
+      entity_id: climate.living_room
+    data:
+      temperature: "{{ answer.slider }}"
 mode: single
 ```
 

@@ -81,6 +81,35 @@ CHOICE_INPUT_SCHEMA = vol.Schema(
     }
 )
 
+
+def _valid_scale(entry: dict[str, Any]) -> dict[str, Any]:
+    """Check that a slider's scale is usable."""
+    if entry["min"] >= entry["max"]:
+        raise vol.Invalid("min must be below max")
+    default = entry.get("default_value")
+    if default is not None and not entry["min"] <= default <= entry["max"]:
+        raise vol.Invalid("default_value must be between min and max")
+    return entry
+
+
+SLIDER_INPUT_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required("type"): "slider",
+            vol.Required("min"): vol.Coerce(float),
+            vol.Required("max"): vol.Coerce(float),
+            vol.Optional("step"): vol.All(
+                vol.Coerce(float), vol.Range(min=0, min_included=False)
+            ),
+            vol.Optional("unit"): cv.string,
+            vol.Optional("default_value"): vol.Coerce(float),
+            vol.Optional("description"): cv.string,
+            vol.Optional("required", default=True): cv.boolean,
+        }
+    ),
+    _valid_scale,
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
@@ -88,6 +117,7 @@ INPUT_SCHEMA = cv.key_value_schemas(
         "text": TEXT_INPUT_SCHEMA,
         "photo": PHOTO_INPUT_SCHEMA,
         "choice": CHOICE_INPUT_SCHEMA,
+        "slider": SLIDER_INPUT_SCHEMA,
     },
 )
 

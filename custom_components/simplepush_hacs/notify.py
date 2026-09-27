@@ -23,6 +23,8 @@ from simplepush import (
     MultiChoiceUpload,
     PhotoInput,
     PhotoUpload,
+    SliderInput,
+    SliderUpload,
     StreamError,
     TaskCanceled,
     TaskCompleted,
@@ -163,6 +165,18 @@ def _build_inputs(
                         multi=entry.get("multi", False),
                         min_selections=entry.get("min_selections"),
                         max_selections=entry.get("max_selections"),
+                    )
+                )
+            case "slider":
+                task_inputs.append(
+                    SliderInput(
+                        min=entry["min"],
+                        max=entry["max"],
+                        step=entry.get("step"),
+                        unit=entry.get("unit"),
+                        default_value=entry.get("default_value"),
+                        description=description,
+                        required=required,
                     )
                 )
     return task_inputs, action_lookup
@@ -376,6 +390,10 @@ class SimplePushNotificationService(BaseNotificationService):
             answer["recipient_id"] = actor.get("publicId")
 
         for upload in item.uploads:
+            if isinstance(upload, SliderUpload):
+                if upload.value is not None:
+                    answer["slider"] = upload.value
+                continue
             if isinstance(upload, ChoiceUpload):
                 if upload.value is not None:
                     answer["choice"] = upload.value
