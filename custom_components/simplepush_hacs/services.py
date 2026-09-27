@@ -67,12 +67,27 @@ PHOTO_INPUT_SCHEMA = vol.Schema(
     }
 )
 
+CHOICE_INPUT_SCHEMA = vol.Schema(
+    {
+        vol.Required("type"): "choice",
+        vol.Required("options"): vol.All(
+            cv.ensure_list, [cv.string], vol.Length(min=2)
+        ),
+        vol.Optional("multi", default=False): cv.boolean,
+        vol.Optional("min_selections"): cv.positive_int,
+        vol.Optional("max_selections"): cv.positive_int,
+        vol.Optional("description"): cv.string,
+        vol.Optional("required", default=True): cv.boolean,
+    }
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
         "actions": ACTIONS_INPUT_SCHEMA,
         "text": TEXT_INPUT_SCHEMA,
         "photo": PHOTO_INPUT_SCHEMA,
+        "choice": CHOICE_INPUT_SCHEMA,
     },
 )
 

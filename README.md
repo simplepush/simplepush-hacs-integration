@@ -100,6 +100,8 @@ The response of `simplepush_hacs.send_task`:
 | `status` | `completed`, or how the task ended without an answer: `expired`, `declined`, `canceled` or `deleted`. |
 | `action`, `action_id` | The selected action's text and its `id`, when one was set. |
 | `text` | The text answer. |
+| `choice` | The chosen option. |
+| `choices` | The chosen options, with `multi`. |
 | `photo` | File path of the saved photo. |
 | `photo_media_content_id` | Media source id of the saved photo, for actions that take media. |
 | `completed_at` | When the answer was given. |
@@ -118,6 +120,7 @@ Each type can be used once.
 | `actions` | `actions`: the buttons. Each has an `action` (the button text), an optional `id` and an optional `style` (`primary` or `destructive`). |
 | `text` | `default_value`: text the field starts with. |
 | `photo` | The photo is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
+| `choice` | `options`: at least two. `multi`: allow choosing several. `min_selections`, `max_selections`: how many with `multi`. |
 
 ### Asking a question with actions
 
@@ -220,6 +223,46 @@ actions:
       title: Bello
       message: "{{ answer.recipient }} sent a photo."
       files: "{{ answer.photo }}"
+mode: single
+```
+
+### Asking to choose
+
+Asks the family what to pick up on the way home and adds every chosen item to the shopping list.
+
+```yaml
+alias: Shopping on the way home
+description: Ask what to buy and put it on the shopping list
+triggers:
+  - trigger: zone
+    entity_id: person.alex
+    zone: zone.work
+    event: leave
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      topic: family-x1si3j1
+      title: Shopping
+      message: Alex is leaving work. What should they pick up?
+      inputs:
+        - type: choice
+          options:
+            - Milk
+            - Bread
+            - Eggs
+            - Coffee
+          multi: true
+      expires_in: 1800
+    response_variable: answer
+  - repeat:
+      for_each: "{{ answer.choices | default([]) }}"
+      sequence:
+        - action: todo.add_item
+          target:
+            entity_id: todo.shopping_list
+          data:
+            item: "{{ repeat.item }}"
 mode: single
 ```
 

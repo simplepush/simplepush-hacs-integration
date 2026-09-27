@@ -15,9 +15,12 @@ from simplepush import (
     ActionsInput,
     ActionUpload,
     ApiError,
+    ChoiceInput,
+    ChoiceUpload,
     ContentFormat,
     DownloadError,
     GroupInput,
+    MultiChoiceUpload,
     PhotoInput,
     PhotoUpload,
     StreamError,
@@ -150,6 +153,17 @@ def _build_inputs(
             case "photo":
                 task_inputs.append(
                     PhotoInput(description=description, required=required)
+                )
+            case "choice":
+                task_inputs.append(
+                    ChoiceInput(
+                        options=entry["options"],
+                        description=description,
+                        required=required,
+                        multi=entry.get("multi", False),
+                        min_selections=entry.get("min_selections"),
+                        max_selections=entry.get("max_selections"),
+                    )
                 )
     return task_inputs, action_lookup
 
@@ -362,6 +376,13 @@ class SimplePushNotificationService(BaseNotificationService):
             answer["recipient_id"] = actor.get("publicId")
 
         for upload in item.uploads:
+            if isinstance(upload, ChoiceUpload):
+                if upload.value is not None:
+                    answer["choice"] = upload.value
+                continue
+            if isinstance(upload, MultiChoiceUpload):
+                answer["choices"] = upload.values
+                continue
             if isinstance(upload, PhotoUpload):
                 answer.update(await self._save_photo(item.task_id, upload))
                 continue

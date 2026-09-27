@@ -5,8 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from simplepush import (
     ActionUpload,
+    ChoiceInput,
+    ChoiceUpload,
     DownloadError,
     Event,
+    MultiChoiceUpload,
     PhotoInput,
     PhotoUpload,
     TaskCompleted,
@@ -358,6 +361,77 @@ async def test_shared_markdown_task_names_who_answered(
     assert kwargs["content_format"] == "markdown"
     assert response["recipient"] == "Alice"
     assert response["recipient_id"] == "usr_1"
+
+
+async def test_choice_answer(hass: HomeAssistant, client) -> None:
+    """A single choice is required on its own and its option is returned."""
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[ChoiceUpload(id="inp_1", index=1, value="Pasta")],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass,
+        client,
+        True,
+        expires_in=60,
+        inputs=[{"type": "choice", "options": ["Pizza", "Pasta"]}],
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [
+        ChoiceInput(options=["Pizza", "Pasta"], required=True, multi=False)
+    ]
+    assert response["choice"] == "Pasta"
+
+
+async def test_multiple_choices_answer(hass: HomeAssistant, client) -> None:
+    """Optional multiple choices next to actions return every chosen option."""
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[
+                ActionUpload(id="inp_1", key="0"),
+                MultiChoiceUpload(id="inp_2", indices=[0, 2], values=["Milk", "Eggs"]),
+            ],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass,
+        client,
+        True,
+        expires_in=60,
+        inputs=[
+            ACTIONS_INPUT,
+            {
+                "type": "choice",
+                "options": ["Milk", "Bread", "Eggs"],
+                "multi": True,
+                "required": False,
+            },
+        ],
+    )
+
+    _, choice_input = client.send_task.call_args.kwargs["inputs"]
+    assert choice_input == ChoiceInput(
+        options=["Milk", "Bread", "Eggs"], required=False, multi=True
+    )
+    assert response["action"] == "yes"
+    assert response["choices"] == ["Milk", "Eggs"]
+
+
+async def test_choices_need_two_options(hass: HomeAssistant, client) -> None:
+    """A choice of one option is refused by the schema."""
+    with pytest.raises(vol.Invalid):
+        await _send(
+            hass, client, False, inputs=[{"type": "choice", "options": ["Only"]}]
+        )
+
+    client.send_task.assert_not_called()
 
 
 async def test_actions_are_required_by_default(hass: HomeAssistant, client) -> None:
