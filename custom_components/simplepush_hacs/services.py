@@ -59,11 +59,20 @@ TEXT_INPUT_SCHEMA = vol.Schema(
     }
 )
 
+PHOTO_INPUT_SCHEMA = vol.Schema(
+    {
+        vol.Required("type"): "photo",
+        vol.Optional("description"): cv.string,
+        vol.Optional("required", default=True): cv.boolean,
+    }
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
         "actions": ACTIONS_INPUT_SCHEMA,
         "text": TEXT_INPUT_SCHEMA,
+        "photo": PHOTO_INPUT_SCHEMA,
     },
 )
 

@@ -6,6 +6,8 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from functools import partial
 import logging
+import mimetypes
+from pathlib import Path
 from typing import Any
 
 from simplepush import (
@@ -14,7 +16,10 @@ from simplepush import (
     ActionUpload,
     ApiError,
     ContentFormat,
+    DownloadError,
     GroupInput,
+    PhotoInput,
+    PhotoUpload,
     StreamError,
     TaskCanceled,
     TaskCompleted,
@@ -142,7 +147,28 @@ def _build_inputs(
                         required=required,
                     )
                 )
+            case "photo":
+                task_inputs.append(
+                    PhotoInput(description=description, required=required)
+                )
     return task_inputs, action_lookup
+
+
+# Content types the app sends that Python's mimetypes does not know.
+_EXTENSIONS = {"audio/m4a": ".m4a", "audio/x-m4a": ".m4a"}
+
+
+def _extension(content_type: str, filename: str | None) -> str:
+    """File extension of a download, from its content type.
+
+    A file the phone couldn't identify (application/octet-stream) keeps the
+    extension of its name.
+    """
+    if content_type == "application/octet-stream":
+        return Path(filename).suffix if filename else ""
+    return (
+        _EXTENSIONS.get(content_type) or mimetypes.guess_extension(content_type) or ""
+    )
 
 
 class SimplePushNotificationService(BaseNotificationService):
@@ -297,7 +323,7 @@ class SimplePushNotificationService(BaseNotificationService):
             async for event in sent.inputs(replay=True):
                 item = event.item if isinstance(event, GroupInput) else event
                 if isinstance(item, TaskCompleted):
-                    answer = self._answer(sent, event, item, action_lookup)
+                    answer = await self._answer(sent, event, item, action_lookup)
                     if result is not None and not result.done():
                         result.set_result(answer)
                 elif (terminal := _TERMINAL_STATUS.get(type(item))) is not None:
@@ -314,7 +340,7 @@ class SimplePushNotificationService(BaseNotificationService):
             if result is not None and not result.done():
                 result.set_result({"status": status})
 
-    def _answer(
+    async def _answer(
         self,
         sent: Any,
         event: Any,
@@ -336,6 +362,9 @@ class SimplePushNotificationService(BaseNotificationService):
             answer["recipient_id"] = actor.get("publicId")
 
         for upload in item.uploads:
+            if isinstance(upload, PhotoUpload):
+                answer.update(await self._save_photo(item.task_id, upload))
+                continue
             if isinstance(upload, TextUpload):
                 if upload.value is not None:
                     answer["text"] = upload.value
@@ -365,3 +394,41 @@ class SimplePushNotificationService(BaseNotificationService):
 
         self.hass.bus.async_fire(EVENT_TASK_COMPLETED, answer)
         return answer
+
+    async def _save_photo(
+        self, task_id: str | None, upload: PhotoUpload
+    ) -> dict[str, str]:
+        """Download a photo answer into the media folder.
+
+        Returns its file path, and its media source id when it is in the local
+        media folder, or nothing when the download failed.
+        """
+        try:
+            data = await upload.read()
+        except (ApiError, DownloadError, OSError) as err:
+            _LOGGER.error("Failed to download the photo of task %s: %s", task_id, err)
+            return {}
+
+        local = self.hass.config.media_dirs.get("local")
+        relative = f"simplepush/tasks/{upload.id}"
+
+        def write() -> str:
+            suffix = _extension(upload.content_type, upload.filename)
+            path = Path(local or self.hass.config.path("media"), relative + suffix)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            return str(path)
+
+        try:
+            path = await self.hass.async_add_executor_job(write)
+        except OSError as err:
+            _LOGGER.error("Failed to save the photo of task %s: %s", task_id, err)
+            return {}
+
+        photo = {"photo": path}
+        if local:
+            name = Path(path).name
+            photo["photo_media_content_id"] = (
+                f"media-source://media_source/local/simplepush/tasks/{name}"
+            )
+        return photo

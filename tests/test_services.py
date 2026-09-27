@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from simplepush import (
     ActionUpload,
+    DownloadError,
     Event,
+    PhotoInput,
+    PhotoUpload,
     TaskCompleted,
     TaskExpired,
     TextInput,
@@ -21,6 +24,7 @@ from custom_components.simplepush_hacs.const import (
     SERVICE_SEND_TASK,
     SUBENTRY_TOPIC,
 )
+from custom_components.simplepush_hacs.notify import _extension
 from homeassistant.config_entries import ConfigSubentryData
 from homeassistant.const import CONF_API_TOKEN, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -266,6 +270,64 @@ async def test_optional_text_next_to_actions(hass: HomeAssistant, client) -> Non
     assert response["text"] == "Guests are still here"
 
 
+def _photo(read: AsyncMock) -> MagicMock:
+    photo = MagicMock(spec=PhotoUpload)
+    photo.id = "inp_1"
+    photo.filename = None
+    photo.content_type = "image/jpeg"
+    photo.read = read
+    return photo
+
+
+async def test_photo_input_is_saved_to_media(
+    hass: HomeAssistant, client, tmp_path
+) -> None:
+    """A photo answer is saved to the local media folder."""
+    hass.config.media_dirs = {"local": str(tmp_path)}
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[_photo(AsyncMock(return_value=b"jpeg bytes"))],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass, client, True, expires_in=60, inputs=[{"type": "photo"}]
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [PhotoInput(required=True)]
+    path = tmp_path / "simplepush" / "tasks" / "inp_1.jpg"
+    assert path.read_bytes() == b"jpeg bytes"
+    assert response["photo"] == str(path)
+    assert (
+        response["photo_media_content_id"]
+        == "media-source://media_source/local/simplepush/tasks/inp_1.jpg"
+    )
+
+
+async def test_failed_photo_download_still_answers(
+    hass: HomeAssistant, client, tmp_path, caplog
+) -> None:
+    """A photo that cannot be downloaded is logged and left out of the answer."""
+    hass.config.media_dirs = {"local": str(tmp_path)}
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[_photo(AsyncMock(side_effect=DownloadError("no key")))],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass, client, True, expires_in=60, inputs=[{"type": "photo"}]
+    )
+
+    assert response["status"] == "completed"
+    assert "photo" not in response
+    assert "Failed to download the photo of task tsk_1: no key" in caplog.text
+
+
 async def test_shared_markdown_task_names_who_answered(
     hass: HomeAssistant, client
 ) -> None:
@@ -324,3 +386,20 @@ async def test_input_type_used_twice_is_refused(hass: HomeAssistant, client) -> 
         await _send(hass, client, False, inputs=[ACTIONS_INPUT, ACTIONS_INPUT])
 
     client.send_task.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("content_type", "filename", "extension"),
+    [
+        ("image/jpeg", None, ".jpg"),
+        ("image/png", "IMG_1.jpg", ".png"),
+        ("audio/m4a", None, ".m4a"),
+        ("application/pdf", None, ".pdf"),
+        ("application/octet-stream", "invoice.pdf", ".pdf"),
+        ("application/x-unknown", None, ""),
+        ("application/octet-stream", None, ""),
+    ],
+)
+def test_extension_comes_from_content_type(content_type, filename, extension) -> None:
+    """The content type decides the extension, the file name only for octet-stream."""
+    assert _extension(content_type, filename) == extension

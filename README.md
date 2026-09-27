@@ -100,6 +100,8 @@ The response of `simplepush_hacs.send_task`:
 | `status` | `completed`, or how the task ended without an answer: `expired`, `declined`, `canceled` or `deleted`. |
 | `action`, `action_id` | The selected action's text and its `id`, when one was set. |
 | `text` | The text answer. |
+| `photo` | File path of the saved photo. |
+| `photo_media_content_id` | Media source id of the saved photo, for actions that take media. |
 | `completed_at` | When the answer was given. |
 | `recipient`, `recipient_id` | Who answered. |
 
@@ -115,6 +117,7 @@ Each type can be used once.
 | --- | --- |
 | `actions` | `actions`: the buttons. Each has an `action` (the button text), an optional `id` and an optional `style` (`primary` or `destructive`). |
 | `text` | `default_value`: text the field starts with. |
+| `photo` | The photo is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 
 ### Asking a question with actions
 
@@ -183,6 +186,40 @@ actions:
   - action: conversation.process
     data:
       text: "{{ answer.text }}"
+mode: single
+```
+
+### Asking for a photo
+
+Asks the dog sitter for a photo of the dog every evening and forwards it to your own devices.
+The saved photo is in the media folder, so it can be attached with `files` again.
+`photo_media_content_id` works with actions that take media, like the attachments of `ai_task.generate_data`.
+
+```yaml
+alias: Dog photo
+description: Ask the dog sitter for a photo and forward it
+triggers:
+  - trigger: time
+    at: "19:00:00"
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      topic: dogsitter-q8f2k1
+      title: Dog
+      message: Please send a photo of Bello.
+      inputs:
+        - type: photo
+      expires_in: 7200
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.photo is defined }}"
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      title: Bello
+      message: "{{ answer.recipient }} sent a photo."
+      files: "{{ answer.photo }}"
 mode: single
 ```
 
