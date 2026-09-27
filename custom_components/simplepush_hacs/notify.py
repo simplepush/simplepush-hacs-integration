@@ -34,6 +34,8 @@ from simplepush import (
     TaskGroup,
     TextInput,
     TextUpload,
+    VoiceRecordingInput,
+    VoiceUpload,
 )
 import voluptuous as vol
 
@@ -178,6 +180,10 @@ def _build_inputs(
                         description=description,
                         required=required,
                     )
+                )
+            case "voice":
+                task_inputs.append(
+                    VoiceRecordingInput(description=description, required=required)
                 )
     return task_inputs, action_lookup
 
@@ -390,6 +396,13 @@ class SimplePushNotificationService(BaseNotificationService):
             answer["recipient_id"] = actor.get("publicId")
 
         for upload in item.uploads:
+            if isinstance(upload, VoiceUpload):
+                answer.update(
+                    await self._save_file("simplepush/tasks", upload, "voice")
+                )
+                if upload.duration_seconds is not None:
+                    answer["voice_duration"] = upload.duration_seconds
+                continue
             if isinstance(upload, SliderUpload):
                 if upload.value is not None:
                     answer["slider"] = upload.value
@@ -402,7 +415,9 @@ class SimplePushNotificationService(BaseNotificationService):
                 answer["choices"] = upload.values
                 continue
             if isinstance(upload, PhotoUpload):
-                answer.update(await self._save_photo(item.task_id, upload))
+                answer.update(
+                    await self._save_file("simplepush/tasks", upload, "photo")
+                )
                 continue
             if isinstance(upload, TextUpload):
                 if upload.value is not None:
@@ -434,40 +449,42 @@ class SimplePushNotificationService(BaseNotificationService):
         self.hass.bus.async_fire(EVENT_TASK_COMPLETED, answer)
         return answer
 
-    async def _save_photo(
-        self, task_id: str | None, upload: PhotoUpload
-    ) -> dict[str, str]:
-        """Download a photo answer into the media folder.
+    def _media_folder(self) -> tuple[Path, bool]:
+        """Return the media folder for downloads and whether it is the local one."""
+        if local := self.hass.config.media_dirs.get("local"):
+            return Path(local), True
+        return Path(self.hass.config.path("media")), False
 
-        Returns its file path, and its media source id when it is in the local
-        media folder, or nothing when the download failed.
+    async def _save_file(self, folder: str, upload: Any, key: str) -> dict[str, str]:
+        """Download a photo, file or audio clip into `folder` of the media folder.
+
+        Returns its file path under `key`, and its media source id when it is in
+        the local media folder, or nothing when the download failed.
         """
         try:
             data = await upload.read()
         except (ApiError, DownloadError, OSError) as err:
-            _LOGGER.error("Failed to download the photo of task %s: %s", task_id, err)
+            _LOGGER.error("Failed to download the %s %s: %s", key, upload.id, err)
             return {}
 
-        local = self.hass.config.media_dirs.get("local")
-        relative = f"simplepush/tasks/{upload.id}"
+        base, local = self._media_folder()
 
-        def write() -> str:
+        def write() -> Path:
             suffix = _extension(upload.content_type, upload.filename)
-            path = Path(local or self.hass.config.path("media"), relative + suffix)
+            path = base / folder / f"{upload.id}{suffix}"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-            return str(path)
+            return path
 
         try:
             path = await self.hass.async_add_executor_job(write)
         except OSError as err:
-            _LOGGER.error("Failed to save the photo of task %s: %s", task_id, err)
+            _LOGGER.error("Failed to save the %s %s: %s", key, upload.id, err)
             return {}
 
-        photo = {"photo": path}
+        saved = {key: str(path)}
         if local:
-            name = Path(path).name
-            photo["photo_media_content_id"] = (
-                f"media-source://media_source/local/simplepush/tasks/{name}"
+            saved[f"{key}_media_content_id"] = (
+                f"media-source://media_source/local/{folder}/{path.name}"
             )
-        return photo
+        return saved

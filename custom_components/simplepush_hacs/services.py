@@ -110,6 +110,14 @@ SLIDER_INPUT_SCHEMA = vol.All(
     _valid_scale,
 )
 
+VOICE_INPUT_SCHEMA = vol.Schema(
+    {
+        vol.Required("type"): "voice",
+        vol.Optional("description"): cv.string,
+        vol.Optional("required", default=True): cv.boolean,
+    }
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
@@ -118,6 +126,7 @@ INPUT_SCHEMA = cv.key_value_schemas(
         "photo": PHOTO_INPUT_SCHEMA,
         "choice": CHOICE_INPUT_SCHEMA,
         "slider": SLIDER_INPUT_SCHEMA,
+        "voice": VOICE_INPUT_SCHEMA,
     },
 )
 

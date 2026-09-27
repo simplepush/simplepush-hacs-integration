@@ -45,6 +45,6 @@ send_task:
         text:
           multiple: true
     inputs:
-      example: '[{"type": "actions", "actions": [{"action": "Close"}, {"action": "Leave open"}]}, {"type": "text", "required": false}, {"type": "photo"}, {"type": "choice", "options": ["Now", "Later"]}, {"type": "slider", "min": 15, "max": 25, "unit": "°C"}]'
+      example: '[{"type": "actions", "actions": [{"action": "Close"}, {"action": "Leave open"}]}, {"type": "text", "required": false}, {"type": "photo"}, {"type": "choice", "options": ["Now", "Later"]}, {"type": "slider", "min": 15, "max": 25, "unit": "°C"}, {"type": "voice"}]'
       selector:
         object:

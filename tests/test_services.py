@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from simplepush import (
+    VoiceRecordingInput,
+    VoiceUpload,
     ActionUpload,
     ChoiceInput,
     ChoiceUpload,
@@ -330,7 +332,7 @@ async def test_failed_photo_download_still_answers(
 
     assert response["status"] == "completed"
     assert "photo" not in response
-    assert "Failed to download the photo of task tsk_1: no key" in caplog.text
+    assert "Failed to download the photo inp_1: no key" in caplog.text
 
 
 async def test_shared_markdown_task_names_who_answered(
@@ -513,6 +515,38 @@ async def test_unusable_slider_is_refused(hass: HomeAssistant, client, slider) -
         await _send(hass, client, False, inputs=[slider])
 
     client.send_task.assert_not_called()
+
+
+async def test_voice_answer_is_saved_to_media(
+    hass: HomeAssistant, client, tmp_path
+) -> None:
+    """A voice recording is saved to the media folder with its length."""
+    hass.config.media_dirs = {"local": str(tmp_path)}
+    voice = MagicMock(spec=VoiceUpload)
+    voice.id = "inp_1"
+    voice.filename = None
+    voice.content_type = "audio/mp4"
+    voice.duration_seconds = 4.2
+    voice.read = AsyncMock(return_value=b"audio bytes")
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[voice],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass, client, True, expires_in=60, inputs=[{"type": "voice"}]
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [
+        VoiceRecordingInput(required=True)
+    ]
+    path = tmp_path / "simplepush" / "tasks" / "inp_1.m4a"
+    assert path.read_bytes() == b"audio bytes"
+    assert response["voice"] == str(path)
+    assert response["voice_duration"] == 4.2
 
 
 @pytest.mark.parametrize(

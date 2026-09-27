@@ -105,6 +105,8 @@ The response of `simplepush_hacs.send_task`:
 | `slider` | The number chosen on a slider. |
 | `photo` | File path of the saved photo. |
 | `photo_media_content_id` | Media source id of the saved photo, for actions that take media. |
+| `voice`, `voice_media_content_id` | File path and media source id of the saved voice recording. |
+| `voice_duration` | Length of the voice recording in seconds. |
 | `completed_at` | When the answer was given. |
 | `recipient`, `recipient_id` | Who answered. |
 
@@ -123,6 +125,7 @@ Each type can be used once.
 | `photo` | The photo is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 | `choice` | `options`: at least two. `multi`: allow choosing several. `min_selections`, `max_selections`: how many with `multi`. |
 | `slider` | `min`, `max`: the scale. `step`: the steps in between, continuous without it. `unit`: a short label like `°C`. `default_value`: where the slider starts. |
+| `voice` | A voice recording. It is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 
 ### Asking a question with actions
 
@@ -305,6 +308,38 @@ actions:
       entity_id: climate.living_room
     data:
       temperature: "{{ answer.slider }}"
+mode: single
+```
+
+### Asking for a voice message
+
+Asks for a voice message in the afternoon and plays it on the kitchen speaker.
+
+```yaml
+alias: Message for the kids
+description: Ask for a voice message and play it in the kitchen
+triggers:
+  - trigger: time
+    at: "15:30:00"
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      topic: family-x1si3j1
+      title: Message for the kids
+      message: Record a message for the kids. It plays on the kitchen speaker.
+      inputs:
+        - type: voice
+      expires_in: 3600
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.voice_media_content_id is defined }}"
+  - action: media_player.play_media
+    target:
+      entity_id: media_player.kitchen
+    data:
+      media_content_id: "{{ answer.voice_media_content_id }}"
+      media_content_type: music
 mode: single
 ```
 
