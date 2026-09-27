@@ -62,5 +62,57 @@
       "title": "The Simplepush YAML configuration has been removed",
       "description": "Configuring Simplepush using YAML has been removed.\n\nYour existing YAML configuration is not used by Home Assistant.\n\nRemove the Simplepush YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue."
     }
+  },
+  "services": {
+    "send_task": {
+      "name": "Send task",
+      "description": "Sends a task to your Simplepush devices or a topic. Ask for a response to wait for the first answer.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Simplepush entry",
+          "description": "The Simplepush entry to send with."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Content of the task."
+        },
+        "markdown": {
+          "name": "Markdown",
+          "description": "Show the message formatted as Markdown."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Title of the task."
+        },
+        "topic": {
+          "name": "Topic",
+          "description": "Topic to send to. It must be added to the Simplepush entry. Leave empty to send to your own devices."
+        },
+        "shared": {
+          "name": "Shared",
+          "description": "Send one task that everyone on the topic sees. The first answer settles it for all."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "How loudly the push interrupts, 1 (minimal) to 5 (critical). Default 3."
+        },
+        "expires_in": {
+          "name": "Expires in",
+          "description": "Seconds until the task expires and can no longer be answered. Required to wait for an answer."
+        },
+        "files": {
+          "name": "Files",
+          "description": "Local files to upload and attach. Only files in allowed directories are sent."
+        },
+        "links": {
+          "name": "Links",
+          "description": "URLs to attach."
+        },
+        "inputs": {
+          "name": "Inputs",
+          "description": "What the recipient answers, in order. Each entry has a type, an optional description and required (default true). The README lists the options of each type."
+        }
+      }
+    }
   }
 }

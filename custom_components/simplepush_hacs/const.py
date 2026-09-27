@@ -12,11 +12,15 @@ CONF_ENTRY_ID: Final = "entry_id"
 
 SUBENTRY_TOPIC: Final = "topic"
 
-ATTR_ACTIONS: Final = "actions"
 ATTR_EXPIRES_IN: Final = "expires_in"
 ATTR_FILES: Final = "files"
+ATTR_INPUTS: Final = "inputs"
 ATTR_LINKS: Final = "links"
+ATTR_MARKDOWN: Final = "markdown"
 ATTR_PRIORITY: Final = "priority"
+ATTR_SHARED: Final = "shared"
 ATTR_TOPIC: Final = "topic"
+
+SERVICE_SEND_TASK: Final = "send_task"
 
 EVENT_ACTION_TRIGGERED: Final = "simplepush_action_triggered_event"

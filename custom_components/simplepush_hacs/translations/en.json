@@ -62,5 +62,57 @@
             "description": "Configuring Simplepush using YAML has been removed.\n\nYour existing YAML configuration is not used by Home Assistant.\n\nRemove the Simplepush YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.",
             "title": "The Simplepush YAML configuration has been removed"
         }
+    },
+    "services": {
+        "send_task": {
+            "description": "Sends a task to your Simplepush devices or a topic. Ask for a response to wait for the first answer.",
+            "fields": {
+                "config_entry_id": {
+                    "description": "The Simplepush entry to send with.",
+                    "name": "Simplepush entry"
+                },
+                "expires_in": {
+                    "description": "Seconds until the task expires and can no longer be answered. Required to wait for an answer.",
+                    "name": "Expires in"
+                },
+                "files": {
+                    "description": "Local files to upload and attach. Only files in allowed directories are sent.",
+                    "name": "Files"
+                },
+                "inputs": {
+                    "description": "What the recipient answers, in order. Each entry has a type, an optional description and required (default true). The README lists the options of each type.",
+                    "name": "Inputs"
+                },
+                "links": {
+                    "description": "URLs to attach.",
+                    "name": "Links"
+                },
+                "markdown": {
+                    "description": "Show the message formatted as Markdown.",
+                    "name": "Markdown"
+                },
+                "message": {
+                    "description": "Content of the task.",
+                    "name": "Message"
+                },
+                "priority": {
+                    "description": "How loudly the push interrupts, 1 (minimal) to 5 (critical). Default 3.",
+                    "name": "Priority"
+                },
+                "shared": {
+                    "description": "Send one task that everyone on the topic sees. The first answer settles it for all.",
+                    "name": "Shared"
+                },
+                "title": {
+                    "description": "Title of the task.",
+                    "name": "Title"
+                },
+                "topic": {
+                    "description": "Topic to send to. It must be added to the Simplepush entry. Leave empty to send to your own devices.",
+                    "name": "Topic"
+                }
+            },
+            "name": "Send task"
+        }
     }
 }

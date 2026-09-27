@@ -63,8 +63,8 @@ Automations pick the topic with `topic`. A task without `topic` goes to your own
 Version 1.x used a device key, password and salt. Those entries cannot be migrated.
 Remove the old Simplepush entry and add it again with your API token.
 
-In automations, `event`, `attachments` and `action_timeout` in the service data are gone.
-Use `files`, `links` and `expires_in` instead (see below).
+In automations, `event`, `attachments`, `action_timeout` and `actions` in the service data are gone.
+Use `files`, `links`, `expires_in` and `inputs` instead (see below).
 
 ## Examples
 
@@ -73,29 +73,52 @@ All examples are provided in YAML.
 To try them out you can create a new automation, edit the automation in YAML and copy paste the examples.
 After saving the automation you can run them to try them out.
 
-### Service data
+### Sending tasks
+
+`simplepush_hacs.send_task` sends a task. `config_entry_id` picks the Simplepush entry (the action editor lists your entries).
+Call it with `response_variable` and it waits for the first answer and returns it, so the automation can use the answer in its next step.
+Waiting needs `expires_in`, so the wait ends when the task can no longer be answered.
+
+Each entry also provides `notify.<name>` for Home Assistant features that take any notifier, like alerts, notify groups and blueprints. It takes the options below under `data` and returns nothing. Answers arrive as events.
 
 | Key | Description |
 | --- | --- |
-| `actions` | List of buttons. Each entry has an `action` (the button text), an optional `id` and an optional `style` (`primary` or `destructive`). |
+| `inputs` | What the recipient answers, see [Inputs](#inputs). |
 | `expires_in` | Seconds until the task expires. An expired task can no longer be answered in the app. Without it the task stays open. |
 | `files` | Local file path, or a list of them, to upload and attach. Encrypted when the task is. Only files in `/config/www`, the media folders or a directory listed in [`allowlist_external_dirs`](https://www.home-assistant.io/integrations/homeassistant/#allowlist_external_dirs) are sent. |
 | `links` | URL, or a list of URLs, to attach. |
+| `markdown` | Show the message formatted as Markdown. The title stays plain. |
 | `topic` | Topic to send to. It must be added to the Simplepush entry. Without it the task goes to your own devices. |
+| `shared` | Send one task that everyone on the topic sees. The first answer settles it for all. By default everyone gets their own copy to answer. |
 | `priority` | How loudly the push interrupts, 1 (minimal) to 5 (critical). Default 3. Level 5 sounds even when the phone is muted. |
+
+The response of `simplepush_hacs.send_task`:
+
+| Key | Description |
+| --- | --- |
+| `task_id` / `group_id` | The sent task. A task sent to a topic is a group with one task per recipient. |
+| `status` | `completed`, or how the task ended without an answer: `expired`, `declined`, `canceled` or `deleted`. |
+| `action`, `action_id` | The selected action's text and its `id`, when one was set. |
+| `completed_at` | When the answer was given. |
+| `recipient`, `recipient_id` | Who answered. |
+
+With several recipients the response holds the first answer. Every answer also fires the events described below.
+
+### Inputs
+
+Each entry of `inputs` has a `type`, an optional `description` shown with it, and `required` (default `true`).
+The task is answered once every required input is answered. When no input is required, the first answer completes it.
+Each type can be used once.
+
+| Type | Options |
+| --- | --- |
+| `actions` | `actions`: the buttons. Each has an `action` (the button text), an optional `id` and an optional `style` (`primary` or `destructive`). |
 
 ### Asking a question with actions
 
 Sends a task with two actions (`Close` and `Leave open`) at priority 4 when the garage door has been open for 10 minutes.
-Closing the door only happens when `Close` is selected.
-
-A `simplepush_action_triggered_event` event is fired when an action is selected.
-The event carries `action_selected`, `action_selected_at`, `task_id`, the `id` when one was set, and `recipient` when the task went to a topic.
-Filter on the `id` to match the event to the task that was sent.
-
-`expires_in` expires the task in the app after that many seconds, so a stale question can't be answered anymore.
-Home Assistant keeps listening until the task is answered, expires or is canceled.
-Set the `wait_for_trigger` timeout to the same length as `expires_in` so the automation stops waiting once the task can't be answered anymore.
+The door is closed only when `Close` is selected.
+`expires_in` expires the task in the app after 10 minutes, so a stale question can't be answered anymore.
 
 ```yaml
 alias: Garage door left open
@@ -106,30 +129,51 @@ triggers:
     to: open
     for: "00:10:00"
 actions:
-  - action: notify.simplepush
+  - action: simplepush_hacs.send_task
     data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
       title: Garage door
       message: The garage door has been open for 10 minutes.
-      data:
-        priority: 4
-        expires_in: 600
-        actions:
-          - action: Close
-            id: garage_close
-            style: primary
-          - action: Leave open
-            id: garage_leave
-  - wait_for_trigger:
-      - trigger: event
-        event_type: simplepush_action_triggered_event
-        event_data:
-          id: garage_close
-    timeout: "00:10:00"
-    continue_on_timeout: false
+      priority: 4
+      expires_in: 600
+      inputs:
+        - type: actions
+          actions:
+            - action: Close
+              style: primary
+            - action: Leave open
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.action == 'Close' }}"
   - action: cover.close_cover
     target:
       entity_id: cover.garage_door
 mode: single
+```
+
+### Reacting to answers with events
+
+A `simplepush_action_triggered_event` event is fired when an action is selected, also for tasks sent with `notify`.
+The event carries `action_selected`, `action_selected_at`, `task_id`, the `id` when one was set, and `recipient` when the task went to a topic.
+Filter on the `id` to match the event to the task that was sent. The example below reacts to an action sent with `id: pool_pump_off`.
+
+Events suit tasks that go to several people, where every answer counts, and answers that may take hours: a separate automation triggered by the event keeps working while nothing waits.
+Home Assistant listens until the task is answered, expires or is canceled, but not across a restart.
+
+```yaml
+alias: Pool pump answers
+description: Log every answer to the pool pump question
+triggers:
+  - trigger: event
+    event_type: simplepush_action_triggered_event
+    event_data:
+      id: pool_pump_off
+actions:
+  - action: logbook.log
+    data:
+      name: Pool pump
+      message: "{{ trigger.event.data.recipient }} wants the pump off"
+mode: queued
 ```
 
 ### Sending a camera snapshot
@@ -150,14 +194,14 @@ actions:
       entity_id: camera.front_door
     data:
       filename: /config/www/front-door.jpg
-  - action: notify.simplepush
+  - action: simplepush_hacs.send_task
     data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
       title: Doorbell
       message: Someone is at the front door.
-      data:
-        priority: 4
-        files: /config/www/front-door.jpg
-        links: https://homeassistant.local:8123/dashboard-cameras
+      priority: 4
+      files: /config/www/front-door.jpg
+      links: https://homeassistant.local:8123/dashboard-cameras
 mode: single
 ```
 
@@ -175,13 +219,13 @@ triggers:
     entity_id: binary_sensor.washing_machine_leak
     to: "on"
 actions:
-  - action: notify.simplepush
+  - action: simplepush_hacs.send_task
     data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
       title: Water leak
       message: Water detected under the washing machine.
-      data:
-        priority: 5
-        topic: family-x1si3j1
+      priority: 5
+      topic: family-x1si3j1
 mode: single
 ```
 
@@ -198,11 +242,11 @@ triggers:
     entity_id: sensor.washing_machine_state
     to: finished
 actions:
-  - action: notify.simplepush
+  - action: simplepush_hacs.send_task
     data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
       message: The washing machine is done.
-      data:
-        priority: 2
+      priority: 2
 mode: single
 ```
 

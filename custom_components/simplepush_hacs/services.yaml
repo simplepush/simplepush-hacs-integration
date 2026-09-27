@@ -1,0 +1,50 @@
+send_task:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: simplepush_hacs
+    message:
+      required: true
+      example: The garage door has been open for 10 minutes.
+      selector:
+        text:
+          multiline: true
+    markdown:
+      selector:
+        boolean:
+    title:
+      example: Garage door
+      selector:
+        text:
+    topic:
+      selector:
+        text:
+    shared:
+      selector:
+        boolean:
+    priority:
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: slider
+    expires_in:
+      selector:
+        number:
+          min: 1
+          unit_of_measurement: seconds
+          mode: box
+    files:
+      selector:
+        text:
+          multiple: true
+    links:
+      selector:
+        text:
+          multiple: true
+    inputs:
+      example: '[{"type": "actions", "actions": [{"action": "Close"}, {"action": "Leave open"}]}]'
+      selector:
+        object:

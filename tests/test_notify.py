@@ -40,7 +40,9 @@ CONFIG = {
 
 def _completed(*uploads) -> TaskCompleted:
     return TaskCompleted(
-        task_id="tsk_1", uploads=list(uploads), raw=Event(created_at="2026-09-14T10:00:00Z")
+        task_id="tsk_1",
+        uploads=list(uploads),
+        raw=Event(created_at="2026-09-14T10:00:00Z"),
     )
 
 
@@ -83,6 +85,8 @@ async def test_plain_message(hass: HomeAssistant, client, service) -> None:
     assert kwargs["priority"] is None
     assert kwargs["expires_at"] is None
     assert kwargs["auto_commit"] is True
+    assert kwargs["shared"] is False
+    assert kwargs["content_format"] is None
 
 
 async def test_data_fields(hass: HomeAssistant, client, service) -> None:
@@ -131,7 +135,11 @@ async def test_actions_fire_event(hass: HomeAssistant, client, service) -> None:
     """A selected action fires the Home Assistant event with label and id."""
     sent = MagicMock()
     sent.inputs = _stream(
-        InputEvent(type="taskInputUploaded", uploads=[ActionUpload(id="inp_1", key="0")], raw=Event()),
+        InputEvent(
+            type="taskInputUploaded",
+            uploads=[ActionUpload(id="inp_1", key="0")],
+            raw=Event(),
+        ),
         _completed(ActionUpload(id="inp_1", key="0")),
     )
     client.send_task.return_value = sent
@@ -142,9 +150,14 @@ async def test_actions_fire_event(hass: HomeAssistant, client, service) -> None:
         "approve?",
         data={
             "expires_in": 10,
-            "actions": [
-                {"action": "yes", "id": 123, "style": "primary"},
-                {"action": "no"},
+            "inputs": [
+                {
+                    "type": "actions",
+                    "actions": [
+                        {"action": "yes", "id": 123, "style": "primary"},
+                        {"action": "no"},
+                    ],
+                }
             ],
         },
     )
@@ -158,7 +171,7 @@ async def test_actions_fire_event(hass: HomeAssistant, client, service) -> None:
         ("1", "no", None),
     ]
     assert 9 <= (kwargs["expires_at"] - before).total_seconds() <= 11
-    assert sent.inputs.kwargs == {}
+    assert sent.inputs.kwargs == {"replay": True}
 
     assert len(events) == 1
     assert events[0].data == {
@@ -177,25 +190,38 @@ async def test_actions_without_expires_in_do_not_expire(
     sent.inputs = _stream()
     client.send_task.return_value = sent
 
-    await service.async_send_message("approve?", data={"actions": [{"action": "yes"}]})
+    await service.async_send_message(
+        "approve?",
+        data={"inputs": [{"type": "actions", "actions": [{"action": "yes"}]}]},
+    )
     await hass.async_block_till_done()
 
     assert client.send_task.call_args.kwargs["expires_at"] is None
 
 
-async def test_group_actions_carry_recipient(hass: HomeAssistant, client, service) -> None:
+async def test_group_actions_carry_recipient(
+    hass: HomeAssistant, client, service
+) -> None:
     """Answers from a topic group name the recipient."""
     instance = MagicMock()
     instance.recipient = TaskGroupRecipient(public_id="usr_1", name="Alice")
     sent = MagicMock(spec=TaskGroup)
+    sent.group_id = "grptsk_1"
     sent.inputs = _stream(
-        GroupInput(instance=instance, item=_completed(ActionUpload(id="inp_1", key="1")))
+        GroupInput(
+            instance=instance, item=_completed(ActionUpload(id="inp_1", key="1"))
+        )
     )
     client.send_task.return_value = sent
     events = async_capture_events(hass, EVENT_ACTION_TRIGGERED)
 
     await service.async_send_message(
-        "approve?", data={"actions": [{"action": "yes"}, {"action": "no"}]}
+        "approve?",
+        data={
+            "inputs": [
+                {"type": "actions", "actions": [{"action": "yes"}, {"action": "no"}]}
+            ]
+        },
     )
     await hass.async_block_till_done()
 
@@ -206,32 +232,63 @@ async def test_group_actions_carry_recipient(hass: HomeAssistant, client, servic
     assert events[0].data["recipient_id"] == "usr_1"
 
 
-async def test_non_action_upload_is_ignored(hass: HomeAssistant, client, service) -> None:
+async def test_non_action_upload_is_ignored(
+    hass: HomeAssistant, client, service
+) -> None:
     """Uploads that are not action uploads fire no event."""
     sent = MagicMock()
     sent.inputs = _stream(
-        _completed(TextUpload(id="inp_1", value="x"), ActionUpload(id="inp_2", key=None))
+        _completed(
+            TextUpload(id="inp_1", value="x"), ActionUpload(id="inp_2", key=None)
+        )
     )
     client.send_task.return_value = sent
     events = async_capture_events(hass, EVENT_ACTION_TRIGGERED)
 
-    await service.async_send_message("approve?", data={"actions": [{"action": "yes"}]})
+    await service.async_send_message(
+        "approve?",
+        data={"inputs": [{"type": "actions", "actions": [{"action": "yes"}]}]},
+    )
     await hass.async_block_till_done()
 
     assert events == []
 
 
-async def test_url_actions_are_rejected(hass: HomeAssistant, client, service) -> None:
-    """The old url actions are refused instead of sent without their url."""
+async def test_invalid_inputs_are_not_sent(
+    hass: HomeAssistant, client, service, caplog
+) -> None:
+    """Inputs are checked like the send_task action checks them."""
     await service.async_send_message(
-        "open", data={"actions": [{"action": "open", "url": "https://example.com"}]}
+        "open",
+        data={
+            "inputs": [
+                {
+                    "type": "actions",
+                    "actions": [{"action": "open", "url": "https://example.com"}],
+                }
+            ]
+        },
     )
     await hass.async_block_till_done()
 
     client.send_task.assert_not_called()
+    assert "Invalid Simplepush data" in caplog.text
 
 
-async def test_api_error_is_logged(hass: HomeAssistant, client, service, caplog) -> None:
+async def test_actions_field_is_ignored_with_warning(
+    hass: HomeAssistant, client, service, caplog
+) -> None:
+    """The actions field of 1.x moved into inputs."""
+    await service.async_send_message("hello", data={"actions": [{"action": "yes"}]})
+    await hass.async_block_till_done()
+
+    assert client.send_task.call_args.kwargs["inputs"] is None
+    assert "The actions field is no longer supported" in caplog.text
+
+
+async def test_api_error_is_logged(
+    hass: HomeAssistant, client, service, caplog
+) -> None:
     """A rejected send is logged and does not raise."""
     client.send_task.side_effect = ApiError(400, '{"error":"bad_request"}')
 
@@ -250,7 +307,7 @@ async def test_invalid_priority_is_not_sent(
     await hass.async_block_till_done()
 
     client.send_task.assert_not_called()
-    assert "Priority must be a number from 1 to 5" in caplog.text
+    assert "data['priority']" in caplog.text
 
 
 async def test_expires_in_without_actions(hass: HomeAssistant, client, service) -> None:
@@ -272,7 +329,7 @@ async def test_invalid_expires_in_is_not_sent(
     await hass.async_block_till_done()
 
     client.send_task.assert_not_called()
-    assert "expires_in must be a positive number of seconds" in caplog.text
+    assert "data['expires_in']" in caplog.text
 
 
 async def test_action_timeout_is_ignored_with_warning(
@@ -299,3 +356,26 @@ async def test_files_outside_allowlist_are_not_sent(
 
     client.send_task.assert_not_called()
     assert "not sent: /config/secrets.yaml" in caplog.text
+
+
+async def test_boolean_text_is_understood(hass: HomeAssistant, client, service) -> None:
+    """Read "false" from a template as false for shared and markdown."""
+    await service.async_send_message(
+        "hello", data={"shared": "false", "markdown": "true"}
+    )
+    await hass.async_block_till_done()
+
+    kwargs = client.send_task.call_args.kwargs
+    assert kwargs["shared"] is False
+    assert kwargs["content_format"] == "markdown"
+
+
+async def test_unknown_data_key_is_not_sent(
+    hass: HomeAssistant, client, service, caplog
+) -> None:
+    """A misspelled option is an error instead of being ignored."""
+    await service.async_send_message("hello", data={"prioity": 5})
+    await hass.async_block_till_done()
+
+    client.send_task.assert_not_called()
+    assert "Invalid Simplepush data" in caplog.text

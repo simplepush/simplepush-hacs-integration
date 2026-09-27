@@ -11,6 +11,7 @@ from homeassistant.helpers import discovery
 from homeassistant.helpers.typing import ConfigType
 
 from .const import CONF_ENTRY_ID, CONF_TOPIC, CONF_TOPICS, DATA_HASS_CONFIG, DOMAIN
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     hass.data[DATA_HASS_CONFIG] = config
     hass.data.setdefault(DOMAIN, {})
+    async_setup_services(hass)
     return True
 
 
