@@ -108,6 +108,7 @@ The response of `simplepush_hacs.send_task`:
 | `voice`, `voice_media_content_id` | File path and media source id of the saved voice recording. |
 | `voice_duration` | Length of the voice recording in seconds. |
 | `latitude`, `longitude`, `accuracy` | The answered location, with its accuracy in meters. |
+| `file`, `file_media_content_id` | File path and media source id of the saved file. |
 | `completed_at` | When the answer was given. |
 | `recipient`, `recipient_id` | Who answered. |
 
@@ -128,6 +129,7 @@ Each type can be used once.
 | `slider` | `min`, `max`: the scale. `step`: the steps in between, continuous without it. `unit`: a short label like `°C`. `default_value`: where the slider starts. |
 | `voice` | A voice recording. It is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 | `location` | The recipient's current location. |
+| `file` | A file the recipient picks. It is saved to `simplepush/tasks/` in your local media folder, named by its input id. |
 
 ### Asking a question with actions
 
@@ -376,6 +378,37 @@ actions:
         - "{{ answer.latitude }}"
         - "{{ answer.longitude }}"
       gps_accuracy: "{{ answer.accuracy | default(0) | int }}"
+mode: single
+```
+
+### Asking for a file
+
+Asks the cleaner for the invoice at the end of every month and notes where it was saved.
+
+```yaml
+alias: Cleaning invoice
+description: Collect the monthly invoice as a file
+triggers:
+  - trigger: template
+    value_template: "{{ (now() + timedelta(days=1)).day == 1 and now().hour == 18 }}"
+actions:
+  - action: simplepush_hacs.send_task
+    data:
+      config_entry_id: 01K6ABCDEFGHJKMNPQRSTVWXYZ  # your Simplepush entry
+      topic: cleaning-7hd2m4
+      title: Invoice
+      message: Please send this month's invoice.
+      inputs:
+        - type: file
+          description: The invoice as a PDF
+      expires_in: 604800
+    response_variable: answer
+  - condition: template
+    value_template: "{{ answer.file is defined }}"
+  - action: logbook.log
+    data:
+      name: Cleaning
+      message: "Invoice saved to {{ answer.file }}"
 mode: single
 ```
 

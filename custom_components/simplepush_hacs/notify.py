@@ -19,6 +19,8 @@ from simplepush import (
     ChoiceUpload,
     ContentFormat,
     DownloadError,
+    FileUpload,
+    FileUploadInput,
     GroupInput,
     LocationInput,
     LocationUpload,
@@ -190,6 +192,10 @@ def _build_inputs(
             case "location":
                 task_inputs.append(
                     LocationInput(description=description, required=required)
+                )
+            case "file":
+                task_inputs.append(
+                    FileUploadInput(description=description, required=required)
                 )
     return task_inputs, action_lookup
 
@@ -414,6 +420,9 @@ class SimplePushNotificationService(BaseNotificationService):
                     for key in ("latitude", "longitude", "accuracy"):
                         if (value := getattr(location, key)) is not None:
                             answer[key] = value
+                continue
+            if isinstance(upload, FileUpload):
+                answer.update(await self._save_file("simplepush/tasks", upload, "file"))
                 continue
             if isinstance(upload, SliderUpload):
                 if upload.value is not None:

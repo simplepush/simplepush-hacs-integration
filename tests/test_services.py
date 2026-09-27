@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from simplepush import (
+    FileUpload,
+    FileUploadInput,
     Location,
     LocationInput,
     LocationUpload,
@@ -577,6 +579,40 @@ async def test_location_answer(hass: HomeAssistant, client) -> None:
         13.4,
         8.0,
     )
+
+
+async def test_file_answer_is_saved_to_media(
+    hass: HomeAssistant, client, tmp_path
+) -> None:
+    """A file answer keeps its name's extension in the media folder."""
+    hass.config.media_dirs = {"local": str(tmp_path)}
+    upload = MagicMock(spec=FileUpload)
+    upload.id = "inp_1"
+    upload.filename = "invoice.pdf"
+    upload.content_type = "application/pdf"
+    upload.read = AsyncMock(return_value=b"pdf bytes")
+    client.send_task.return_value = _sent(
+        TaskCompleted(
+            task_id="tsk_1",
+            uploads=[upload],
+            raw=Event(created_at="2026-09-27T10:00:00Z"),
+        )
+    )
+
+    response = await _send(
+        hass,
+        client,
+        True,
+        expires_in=60,
+        inputs=[{"type": "file", "description": "The invoice as a PDF"}],
+    )
+
+    assert client.send_task.call_args.kwargs["inputs"] == [
+        FileUploadInput(description="The invoice as a PDF", required=True)
+    ]
+    path = tmp_path / "simplepush" / "tasks" / "inp_1.pdf"
+    assert path.read_bytes() == b"pdf bytes"
+    assert response["file"] == str(path)
 
 
 @pytest.mark.parametrize(

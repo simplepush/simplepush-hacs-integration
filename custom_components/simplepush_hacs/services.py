@@ -126,6 +126,14 @@ LOCATION_INPUT_SCHEMA = vol.Schema(
     }
 )
 
+FILE_INPUT_SCHEMA = vol.Schema(
+    {
+        vol.Required("type"): "file",
+        vol.Optional("description"): cv.string,
+        vol.Optional("required", default=True): cv.boolean,
+    }
+)
+
 INPUT_SCHEMA = cv.key_value_schemas(
     "type",
     {
@@ -136,6 +144,7 @@ INPUT_SCHEMA = cv.key_value_schemas(
         "slider": SLIDER_INPUT_SCHEMA,
         "voice": VOICE_INPUT_SCHEMA,
         "location": LOCATION_INPUT_SCHEMA,
+        "file": FILE_INPUT_SCHEMA,
     },
 )
 
