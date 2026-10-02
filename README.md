@@ -50,6 +50,8 @@ The configuration is done in the UI once you add Simplepush in the Integrations 
 | Name | Name of the notify service, `notify.<name>`. |
 | Password | Your personal password. It encrypts tasks to your own devices. Leave empty for unencrypted tasks. |
 
+When Simplepush rejects the API token, for example after you replaced it in the app or erased your account data, Home Assistant asks for the new one: open the Simplepush entry in Settings -> Devices & services and select "Reconfigure". The password and topics stay.
+
 ### Topics
 
 To send to a topic, add it to the Simplepush entry: open the entry in Settings -> Devices & services and select "Add topic".

@@ -223,6 +223,32 @@ async def test_options_flow_sets_delete_after(hass: HomeAssistant) -> None:
     assert entry.options == {CONF_DELETE_AFTER: 48}
 
 
+def _reauth_flows(hass: HomeAssistant) -> list:
+    return [
+        flow
+        for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        if flow["context"]["source"] == "reauth"
+    ]
+
+
+async def test_rejected_stream_asks_for_a_new_token(
+    hass: HomeAssistant, caplog
+) -> None:
+    """The event connection refused with 401 starts reauthentication."""
+
+    async def refused():
+        raise StreamError("event stream rejected by server (HTTP 401)", status_code=401)
+        yield
+
+    entry = await _setup(hass, submissions_mock=MagicMock(side_effect=refused))
+    await _wait_until(lambda: "Stopped listening for submissions" in caplog.text)
+    await hass.async_block_till_done()
+
+    flows = _reauth_flows(hass)
+    assert len(flows) == 1
+    assert flows[0]["context"]["entry_id"] == entry.entry_id
+
+
 async def test_failed_stream_stops_listening(hass: HomeAssistant, caplog) -> None:
     """A failure the client can't recover from ends the listener with an error."""
 
@@ -235,6 +261,8 @@ async def test_failed_stream_stops_listening(hass: HomeAssistant, caplog) -> Non
     await _wait_until(lambda: "Stopped listening for submissions" in caplog.text)
 
     submissions.assert_called_once()
+    # Without a status there is nothing to say the token is at fault.
+    assert _reauth_flows(hass) == []
 
 
 async def test_rejected_token_does_not_retry(hass: HomeAssistant, caplog) -> None:
@@ -245,3 +273,6 @@ async def test_rejected_token_does_not_retry(hass: HomeAssistant, caplog) -> Non
 
     submissions.assert_called_once()
     assert "retrying" not in caplog.text
+    # With a Personal Password the salt fetch is the first request to fail.
+    await hass.async_block_till_done()
+    assert len(_reauth_flows(hass)) == 1

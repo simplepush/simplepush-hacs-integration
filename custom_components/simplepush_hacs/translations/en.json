@@ -1,7 +1,8 @@
 {
     "config": {
         "abort": {
-            "already_configured": "This API token is already configured"
+            "already_configured": "This API token is already configured",
+            "reauth_successful": "Re-authentication was successful"
         },
         "error": {
             "cannot_connect": "Failed to connect",
@@ -13,6 +14,13 @@
                     "api_token": "Your Simplepush API token",
                     "name": "Name",
                     "password": "Personal password. Encrypts tasks to your own devices. Leave empty for unencrypted tasks"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Simplepush API token",
+                "description": "Simplepush no longer accepts the API token of {name}. Enter the current one from the app under Settings > API Token.",
+                "data": {
+                    "api_token": "Your Simplepush API token"
                 }
             }
         }

@@ -218,3 +218,84 @@ async def test_change_topic_password(hass: HomeAssistant, create_client) -> None
         CONF_PASSWORD: "new",
     }
     create_client.assert_called_once_with("abc", topics={"alerts": "new"})
+
+
+async def test_reauth_replaces_the_token(hass: HomeAssistant, create_client) -> None:
+    """A new API token replaces the rejected one; passwords and topics stay."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**MOCK_CONFIG, CONF_PASSWORD: "personal"},
+        subentries_data=[
+            ConfigSubentryData(
+                data={CONF_TOPIC: "alerts", CONF_PASSWORD: "topic-pw"},
+                subentry_type=SUBENTRY_TOPIC,
+                title="alerts",
+                unique_id="alerts",
+            )
+        ],
+        unique_id=UNIQUE_ID,
+        version=2,
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["description_placeholders"] == {"name": entry.title}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={CONF_API_TOKEN: "new"}
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data == {
+        **MOCK_CONFIG,
+        CONF_API_TOKEN: "new",
+        CONF_PASSWORD: "personal",
+    }
+    assert entry.unique_id == hashlib.sha256(b"new").hexdigest()[:16]
+    assert [sub.data for sub in entry.subentries.values()] == [
+        {CONF_TOPIC: "alerts", CONF_PASSWORD: "topic-pw"}
+    ]
+    # The test task goes to your own devices, encrypted like any other.
+    create_client.assert_called_once_with("new", "personal")
+
+
+async def test_reauth_with_a_rejected_token(hass: HomeAssistant, create_client) -> None:
+    """A token Simplepush rejects too is shown as an error, the entry is unchanged."""
+    entry = _entry(hass)
+    create_client.return_value.send_task.side_effect = ApiError(401, "unauthorized")
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={CONF_API_TOKEN: "still-wrong"}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert entry.data == MOCK_CONFIG
+    assert entry.unique_id == UNIQUE_ID
+
+
+async def test_reauth_with_the_token_of_another_entry(
+    hass: HomeAssistant, create_client
+) -> None:
+    """A token another entry already uses is refused."""
+    entry = _entry(hass)
+    MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_API_TOKEN: "other", CONF_NAME: "other"},
+        unique_id=hashlib.sha256(b"other").hexdigest()[:16],
+        version=2,
+    ).add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={CONF_API_TOKEN: "other"}
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert entry.data == MOCK_CONFIG
+    create_client.return_value.send_task.assert_not_called()

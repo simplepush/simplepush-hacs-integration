@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from simplepush import (
+    ApiError,
     FileUpload,
     FileUploadInput,
     Location,
@@ -40,7 +41,7 @@ from custom_components.simplepush_hacs.notify import _extension
 from homeassistant.config_entries import ConfigSubentryData
 from homeassistant.const import CONF_API_TOKEN, CONF_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.setup import async_setup_component
 
 from pytest_homeassistant_custom_component.common import (
@@ -630,3 +631,36 @@ async def test_file_answer_is_saved_to_media(
 def test_extension_comes_from_content_type(content_type, filename, extension) -> None:
     """The content type decides the extension, the file name only for octet-stream."""
     assert _extension(content_type, filename) == extension
+
+
+def _reauth_flows(hass: HomeAssistant) -> list:
+    return [
+        flow
+        for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        if flow["context"]["source"] == "reauth"
+    ]
+
+
+async def test_rejected_token_asks_for_a_new_one(hass: HomeAssistant, client) -> None:
+    """A 401 on a send fails the action and starts reauthentication once."""
+    client.send_task.side_effect = ApiError(401, '{"error":"authorization_error"}')
+
+    for _ in range(2):
+        with pytest.raises(HomeAssistantError, match="rejected the task"):
+            await _send(hass, client, False, title="Hi")
+    await hass.async_block_till_done()
+
+    flows = _reauth_flows(hass)
+    assert len(flows) == 1
+    assert flows[0]["context"]["entry_id"] == client.entry_id
+
+
+async def test_forbidden_send_keeps_the_token(hass: HomeAssistant, client) -> None:
+    """A 403 is about the send, not the token: no reauthentication."""
+    client.send_task.side_effect = ApiError(403, '{"error":"not_topic_holder"}')
+
+    with pytest.raises(HomeAssistantError):
+        await _send(hass, client, False, topic="alerts", title="Hi")
+    await hass.async_block_till_done()
+
+    assert _reauth_flows(hass) == []

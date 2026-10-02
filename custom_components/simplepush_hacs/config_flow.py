@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import hashlib
 from typing import Any
 
@@ -54,6 +55,11 @@ def validate_input(
     return None
 
 
+def _unique_id(api_token: str) -> str:
+    """Return a stable id for the API token without storing it twice."""
+    return hashlib.sha256(api_token.encode()).hexdigest()[:16]
+
+
 def _without_empty(user_input: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in user_input.items() if value != ""}
 
@@ -85,10 +91,7 @@ class SimplePushFlowHandler(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             user_input = _without_empty(user_input)
 
-            # A stable id for the API token without storing it twice.
-            await self.async_set_unique_id(
-                hashlib.sha256(user_input[CONF_API_TOKEN].encode()).hexdigest()[:16]
-            )
+            await self.async_set_unique_id(_unique_id(user_input[CONF_API_TOKEN]))
             self._abort_if_unique_id_configured()
 
             self._async_abort_entries_match({CONF_NAME: user_input[CONF_NAME]})
@@ -114,6 +117,50 @@ class SimplePushFlowHandler(ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_PASSWORD): str,
                 }
             ),
+            errors=errors,
+        )
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Simplepush rejected the API token."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for a new API token and keep everything else of the entry.
+
+        The personal password stays valid: replacing the token or erasing the
+        account data keeps the salt it derives from. Topic passwords don't
+        depend on the token.
+        """
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] | None = None
+        if user_input is not None:
+            api_token = user_input[CONF_API_TOKEN]
+            unique_id = _unique_id(api_token)
+            if any(
+                other.unique_id == unique_id and other.entry_id != entry.entry_id
+                for other in self._async_current_entries(include_ignore=False)
+            ):
+                return self.async_abort(reason="already_configured")
+
+            if not (
+                errors := await self.hass.async_add_executor_job(
+                    validate_input, api_token, entry.data.get(CONF_PASSWORD)
+                )
+            ):
+                return self.async_update_reload_and_abort(
+                    entry,
+                    unique_id=unique_id,
+                    data_updates={CONF_API_TOKEN: api_token},
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required(CONF_API_TOKEN): str}),
+            description_placeholders={"name": entry.title},
             errors=errors,
         )
 

@@ -275,6 +275,7 @@ class SimplePushNotificationService(BaseNotificationService):
     def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
         """Initialize the Simplepush notification service."""
         self.hass = hass
+        self._entry_id: str = config[CONF_ENTRY_ID]
         self.topics: dict[str, str | None] = config[CONF_TOPICS]
         self._client = create_client(
             config[CONF_API_TOKEN], config.get(CONF_PASSWORD), self.topics
@@ -305,6 +306,19 @@ class SimplePushNotificationService(BaseNotificationService):
         if self._stop_cleanup is not None:
             self._stop_cleanup()
         await self._client.aclose()
+
+    @callback
+    def _start_reauth(self) -> None:
+        """Ask for a new API token.
+
+        Callers start it on a 401: the token is gone, e.g. replaced in the app
+        or rotated by erasing the account data. Home Assistant runs one reauth
+        at a time.
+        """
+        if (
+            entry := self.hass.config_entries.async_get_entry(self._entry_id)
+        ) is not None:
+            entry.async_start_reauth(self.hass)
 
     async def async_send_message(self, message: str, **kwargs: Any) -> None:
         """Send a task to a Simplepush user."""
@@ -396,6 +410,8 @@ class SimplePushNotificationService(BaseNotificationService):
         try:
             sent = await self.hass.async_add_executor_job(send)
         except ApiError as err:
+            if err.status == 401:
+                self._start_reauth()
             raise HomeAssistantError(f"Simplepush rejected the task: {err}") from err
         except (OSError, ValueError, TypeError) as err:
             raise HomeAssistantError(f"Failed to send the task: {err}") from err
@@ -489,6 +505,8 @@ class SimplePushNotificationService(BaseNotificationService):
         try:
             sent = await self.hass.async_add_executor_job(send)
         except ApiError as err:
+            if err.status == 401:
+                self._start_reauth()
             raise HomeAssistantError(
                 f"Simplepush rejected the notification: {err}"
             ) from err
@@ -537,6 +555,8 @@ class SimplePushNotificationService(BaseNotificationService):
                 if result is not None and not result.done():
                     result.set_result(answer)
         except StreamError as err:
+            if err.status_code == 401:
+                self._start_reauth()
             _LOGGER.error("Lost the connection while waiting for answers: %s", err)
             if result is not None and not result.done():
                 result.set_exception(
@@ -608,6 +628,8 @@ class SimplePushNotificationService(BaseNotificationService):
                 elif (terminal := _TERMINAL_STATUS.get(type(item))) is not None:
                     status = terminal
         except StreamError as err:
+            if err.status_code == 401:
+                self._start_reauth()
             _LOGGER.error("Lost the connection while waiting for answers: %s", err)
             if result is not None and not result.done():
                 result.set_exception(
@@ -718,6 +740,10 @@ class SimplePushNotificationService(BaseNotificationService):
         try:
             data = await upload.read()
         except (ApiError, DownloadError, OSError) as err:
+            if (isinstance(err, ApiError) and err.status == 401) or (
+                isinstance(err, DownloadError) and err.status_code == 401
+            ):
+                self._start_reauth()
             _LOGGER.error("Failed to download the %s %s: %s", key, upload.id, err)
             return {}
 
@@ -766,6 +792,8 @@ class SimplePushNotificationService(BaseNotificationService):
                 break
             except ApiError as err:
                 if 400 <= err.status < 500:
+                    if err.status == 401:
+                        self._start_reauth()
                     _LOGGER.error("Can't listen for submissions: %s", err)
                     return
                 failure: Exception = err
@@ -782,6 +810,8 @@ class SimplePushNotificationService(BaseNotificationService):
             async for submission in submissions:
                 await self._submission_received(submission)
         except StreamError as err:
+            if err.status_code == 401:
+                self._start_reauth()
             _LOGGER.error("Stopped listening for submissions: %s", err)
 
     async def _submission_received(self, submission: Submission) -> None:
