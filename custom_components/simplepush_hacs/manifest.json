@@ -8,5 +8,5 @@
   "issue_tracker": "https://github.com/simplepush/simplepush-hacs-integration/issues",
   "loggers": ["simplepush"],
   "requirements": ["simplepush[crypto]>=3.8.0"],
-  "version": "2.1.0"
+  "version": "2.1.1"
 }
